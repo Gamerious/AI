@@ -1,0 +1,43 @@
+{
+  "agent": {
+    "name": "AutonomousAI",
+    "version": "1.0.0",
+    "description": "Self-directed AI agent with autonomous goals"
+  },
+  "goals": {
+    "enable_default_goals": true,
+    "max_active_goals": 10,
+    "auto_create_subgoals": true
+  },
+  "learning": {
+    "enable_continuous_learning": true,
+    "min_confidence_threshold": 0.6,
+    "adaptation_enabled": true
+  },
+  "memory": {
+    "short_term_capacity": 100,
+    "long_term_min_importance": 4,
+    "consolidation_interval": 100
+  },
+  "ethics": {
+    "enable_ethical_review": true,
+    "require_approval_for_high_risk": true,
+    "max_risk_level": 3
+  },
+  "planning": {
+    "max_tasks_per_plan": 20,
+    "enable_adaptive_planning": true,
+    "task_retry_limit": 3
+  },
+  "runtime": {
+    "default_session_duration_minutes": 60,
+    "max_iterations_per_session": 100,
+    "save_interval_iterations": 5,
+    "reflection_interval_iterations": 10
+  },
+  "storage": {
+    "data_directory": "./ai_data",
+    "auto_save": true,
+    "backup_enabled": false
+  }
+}
