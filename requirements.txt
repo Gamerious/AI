@@ -1,0 +1,10 @@
+# Requirements for Autonomous AI Agent System
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+python-dateutil>=2.8.2
+
+# Optional but recommended for enhanced functionality
+# numpy>=1.21.0  # For numerical operations
+# pandas>=1.3.0  # For data analysis
+# requests>=2.26.0  # For web interactions
