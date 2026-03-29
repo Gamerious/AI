@@ -200,6 +200,11 @@ class NeuroSparkModel(nn.Module):
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
+    def _make_causal_mask(self, N: int, device: torch.device) -> torch.Tensor:
+        """Create causal attention mask: each position can only attend to past."""
+        mask = torch.tril(torch.ones(N, N, device=device, dtype=torch.bool))
+        return mask.unsqueeze(0).unsqueeze(0)  # (1, 1, N, N)
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -212,6 +217,10 @@ class NeuroSparkModel(nn.Module):
         # Embeddings
         positions = torch.arange(N, device=device).unsqueeze(0)
         x = self.token_emb(input_ids) + self.pos_emb(positions)
+
+        # Create causal mask for autoregressive modeling
+        if mask is None:
+            mask = self._make_causal_mask(N, device)
 
         # Process through transformer blocks, collecting layer outputs
         layer_outputs = []

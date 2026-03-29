@@ -248,5 +248,5 @@ class EfficientMultiHeadAttention(nn.Module):
         if N < self.linear_threshold:
             return self._standard_attention(x, mask)
         else:
-            # For long sequences, use linear attention
-            return self.linear_attn(x, mask, causal)
+            # For long sequences, use causal linear attention
+            return self.linear_attn(x, mask, causal=True)
