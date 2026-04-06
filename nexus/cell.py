@@ -84,6 +84,7 @@ class NexusCell(nn.Module):
         n_heads: int,
         d_ff: int,
         max_iterations: int = 8,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.d_model = d_model
@@ -96,6 +97,7 @@ class NexusCell(nn.Module):
             d_model=d_model,
             n_heads=n_heads,
             max_iterations=max_iterations,
+            dropout=dropout,
         )
 
         # Pre-norm for FFN
@@ -105,6 +107,10 @@ class NexusCell(nn.Module):
         self.ffn_gate = nn.Linear(d_model, d_ff, bias=False)
         self.ffn_up = nn.Linear(d_model, d_ff, bias=False)
         self.ffn_down = nn.Linear(d_ff, d_model, bias=False)
+
+        # Dropout
+        self.attn_dropout = nn.Dropout(dropout)
+        self.ffn_dropout = nn.Dropout(dropout)
 
         # GRU state update
         self.state_update = GRUStateUpdate(d_model)
@@ -142,12 +148,12 @@ class NexusCell(nn.Module):
 
         # Cross-Iteration State Attention with residual
         attn_out = self.attention(self.attn_norm(x), state_history, iteration)
-        x = x + attn_out
+        x = x + self.attn_dropout(attn_out)
 
         # SwiGLU FFN with residual
         h = self.ffn_norm(x)
         ffn_out = self.ffn_down(F.silu(self.ffn_gate(h)) * self.ffn_up(h))
-        x = x + ffn_out
+        x = x + self.ffn_dropout(ffn_out)
 
         # Update persistent state
         new_state = self.state_update(state, x)

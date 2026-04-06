@@ -8,7 +8,10 @@ build/
 *.pt
 *.pth
 *.ckpt
+data/
+checkpoints/
 wandb/
 logs/
 .venv/
 venv/
+nexus_training.log

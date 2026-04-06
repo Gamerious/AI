@@ -47,7 +47,7 @@ class CrossIterationStateAttention(nn.Module):
     I think before?" vs "what do my neighbors say?".
     """
 
-    def __init__(self, d_model: int, n_heads: int, max_iterations: int = 8):
+    def __init__(self, d_model: int, n_heads: int, max_iterations: int = 8, dropout: float = 0.0):
         super().__init__()
         assert d_model % n_heads == 0
         self.d_model = d_model
@@ -68,6 +68,9 @@ class CrossIterationStateAttention(nn.Module):
 
         # Output projection
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
+
+        # Attention dropout
+        self.attn_dropout = nn.Dropout(dropout)
 
         # Learned bias: how much to attend to temporal vs spatial
         # Starts small so the model first learns basic spatial attention
@@ -134,7 +137,7 @@ class CrossIterationStateAttention(nn.Module):
             # === Combine spatial and temporal via joint softmax ===
             # Concatenate scores: (B, H, N, N + T)
             all_scores = torch.cat([spatial_scores, temporal_scores], dim=-1)
-            all_weights = F.softmax(all_scores, dim=-1)
+            all_weights = self.attn_dropout(F.softmax(all_scores, dim=-1))
 
             # Split weights back
             spatial_weights = all_weights[:, :, :, :N]       # (B, H, N, N)
@@ -150,7 +153,7 @@ class CrossIterationStateAttention(nn.Module):
             out = spatial_out + temporal_out
         else:
             # First iteration: no temporal context, just spatial
-            spatial_weights = F.softmax(spatial_scores, dim=-1)
+            spatial_weights = self.attn_dropout(F.softmax(spatial_scores, dim=-1))
             out = torch.matmul(spatial_weights, v)  # (B, H, N, dh)
 
         # Reshape and project output

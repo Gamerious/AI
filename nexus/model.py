@@ -42,13 +42,31 @@ class NexusConfig:
 
     @classmethod
     def small(cls) -> "NexusConfig":
-        """~500K params, good balance."""
+        """~350K params, good balance on CPU."""
         return cls(d_model=128, n_heads=4, d_ff=256, n_iterations=6)
 
     @classmethod
     def medium(cls) -> "NexusConfig":
-        """~1M params, for serious training."""
-        return cls(d_model=192, n_heads=6, d_ff=384, n_iterations=8)
+        """~1.5M params, for moderate GPU."""
+        return cls(d_model=256, n_heads=8, d_ff=512, n_iterations=8, max_seq_len=128)
+
+    @classmethod
+    def large(cls) -> "NexusConfig":
+        """~6M real / ~48M effective. Fits 4060 (8GB) with batch_size=48."""
+        return cls(
+            d_model=512, n_heads=8, d_ff=1536,
+            max_seq_len=256, n_iterations=8, max_iterations=12,
+            dropout=0.1,
+        )
+
+    @classmethod
+    def xlarge(cls) -> "NexusConfig":
+        """~15M real / ~120M effective. Fits 4060 with batch_size=16."""
+        return cls(
+            d_model=768, n_heads=12, d_ff=2048,
+            max_seq_len=256, n_iterations=8, max_iterations=12,
+            dropout=0.1,
+        )
 
 
 class NexusModel(nn.Module):
@@ -84,6 +102,7 @@ class NexusModel(nn.Module):
             n_heads=config.n_heads,
             d_ff=config.d_ff,
             max_iterations=config.max_iterations,
+            dropout=config.dropout,
         )
 
         # Output
