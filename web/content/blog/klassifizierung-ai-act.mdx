@@ -1,0 +1,263 @@
+---
+title: "High-Risk oder nicht? So klassifizieren Sie Ihre KI-Systeme nach dem EU AI Act"
+description: "Der praktische Entscheidungsbaum, um jedes KI-System Ihres Unternehmens korrekt in eine der vier Risikokategorien einzuordnen – mit Beispielen aus dem Mittelstand."
+date: "2026-04-12"
+author: "ComplAI"
+tags: ["Risikoklassifizierung", "Anhang III", "High-Risk", "Compliance"]
+slug: "klassifizierung-ai-act"
+readingTime: "10 Minuten"
+---
+
+# High-Risk oder nicht? So klassifizieren Sie Ihre KI-Systeme korrekt
+
+Die schwierigste Frage im EU AI Act ist nicht "Muss ich etwas tun?" (Antwort: ja), sondern "**Was genau?**". Die Antwort hängt davon ab, in welche Risikoklasse Ihre einzelnen KI-Systeme fallen.
+
+Dieser Artikel gibt Ihnen einen **funktionierenden Entscheidungsbaum**, den Sie für jedes System in Ihrem Unternehmen anwenden können. Plus konkrete Beispiele aus dem typischen Mittelstandsalltag.
+
+---
+
+## Der Entscheidungsbaum in einer Zeile
+
+```
+Verboten → General-Purpose → High-Risk → Limited → Minimal
+```
+
+Sie arbeiten sich **in dieser Reihenfolge** durch. Greift eine frühere Kategorie, sind alle späteren irrelevant.
+
+Also: Zuerst prüfen Sie, ob das System verboten ist. Dann, ob es ein General-Purpose-Modell ist. Dann, ob es High-Risk ist. Dann, ob Transparenzpflichten greifen. Wenn alles verneint wird, ist es Minimal Risk.
+
+---
+
+## Schritt 1: Ist das System verboten? (Art. 5)
+
+Beantworten Sie **jede** dieser Fragen mit "ja", "nein" oder "weiß nicht":
+
+### 1a. Manipulation
+*"Verwendet das System unterschwellige Techniken oder gezielt manipulative Methoden, die das Verhalten von Personen derart beeinflussen, dass sie Entscheidungen treffen, die sie sonst nicht getroffen hätten, und damit Schaden entsteht?"*
+
+**Praxisbeispiel**: Ein Werbetool, das depressive Nutzer erkennt und ihnen gezielt teure Produkte empfiehlt. → **Verboten**.
+
+### 1b. Ausnutzung von Schwächen
+*"Nutzt das System Schwächen aufgrund von Alter, Behinderung oder sozio-ökonomischer Lage aus?"*
+
+**Praxisbeispiel**: Eine Voice-KI, die älteren Menschen am Telefon Kreditangebote macht. → **Verboten**.
+
+### 1c. Social Scoring
+*"Bewertet das System das allgemeine Sozialverhalten von Personen und leitet daraus Entscheidungen in anderen, unzusammenhängenden Lebensbereichen ab?"*
+
+**Wichtig**: Das betrifft **nicht** reguläres Bonitätsscoring im Finanzbereich – das ist ausdrücklich erlaubt und fällt stattdessen unter High-Risk.
+
+**Praxisbeispiel**: Ein System, das "guten Kunden" bessere Versicherungsprämien gibt, weil sie pünktlich zahlen. Das wäre High-Risk, **kein Social Scoring**. Erst wenn Sie Verhalten aus **Bereich A** nehmen und daraus Entscheidungen für **Bereich B** ableiten ohne Kontext, wird es zum Verbot.
+
+### 1d. Emotion Detection am Arbeitsplatz
+*"Wird das System zur Emotionserkennung am Arbeitsplatz oder in Bildungseinrichtungen eingesetzt?"*
+
+**Praxisbeispiel**: Ein Call-Center-Tool, das Stress-Level der Mitarbeiter erkennt. → **Verboten**.
+
+**Ausnahmen**: Medizinische oder Sicherheits-Zwecke (z.B. Müdigkeits­erkennung bei Piloten). Aber sehr eng.
+
+### 1e. Biometrische Kategorisierung
+*"Kategorisiert das System Personen biometrisch nach sensiblen Merkmalen wie Hautfarbe, politischen Überzeugungen, religiöser Zugehörigkeit oder sexueller Orientierung?"*
+
+**Praxisbeispiel**: Ein Gesichts-Analyse-Tool, das die "wahrscheinliche religiöse Zugehörigkeit" schätzt. → **Verboten**.
+
+### 1f. Echtzeit-Fernidentifizierung
+*"Wird das System für Echtzeit-Fernidentifizierung im öffentlichen Raum durch Strafverfolgungsbehörden eingesetzt?"*
+
+Betrifft den Mittelstand praktisch nicht.
+
+---
+
+**Wenn eine der Fragen mit "ja" beantwortet wird**: Sie haben ein Verbots-System. Dieses muss **sofort** eingestellt werden. Die Deadline dafür war übrigens **2. Februar 2025** – Sie sind bereits überfällig.
+
+---
+
+## Schritt 2: Ist es ein General-Purpose AI-Modell? (Art. 51 ff.)
+
+Diese Frage betrifft die meisten Unternehmen **nicht**. Sie betrifft Sie nur, wenn Sie **selbst** ein Foundation-Modell anbieten oder hosten.
+
+Die **Nutzung** von ChatGPT oder Claude macht Sie nicht zum GPAI-Provider – OpenAI und Anthropic sind die Provider. Sie sind "Deployer" oder "Betreiber" im Sinne des Gesetzes.
+
+Wenn Sie aber selbst Modelle trainieren und öffentlich anbieten (z.B. eine deutsche Übersetzungs-KI), dann gelten Art. 51 ff. für Sie – mit zusätzlichen Pflichten zu technischer Dokumentation, Urheberrechts-Policy und Trainings­daten-Zusammenfassung.
+
+Für den typischen Mittelstand: **Sie können hier meist weitergehen**. Sie sind Betreiber, nicht Provider.
+
+---
+
+## Schritt 3: Ist es High-Risk? (Art. 6 + Anhang III)
+
+Hier wird es für die meisten Unternehmen interessant. Ein System ist High-Risk, wenn eines der beiden Kriterien erfüllt ist:
+
+### Kriterium A: Safety-Komponente unter EU-Harmonisierung (Art. 6 Abs. 1)
+
+Das System ist Sicherheits­komponente eines Produkts, das unter EU-Harmonisierungsrechtsvorschriften fällt (Anhang I). Dazu gehören:
+
+- Maschinen (MRL)
+- Spielzeug
+- Medizinprodukte (MDR)
+- In-vitro-Diagnostika (IVDR)
+- Druckgeräte
+- Aufzüge
+- Sportboote
+- Kraftfahrzeuge
+- Funkanlagen
+
+**Praxisbeispiel für den Mittelstand**: Ein Maschinenbauer hat eine KI-basierte Kollisionserkennung in seinen CNC-Fräsen. Maschinen = Anhang I. KI steuert Sicherheits-Feature. → **High-Risk**.
+
+### Kriterium B: Anwendungsfall nach Anhang III
+
+Anhang III listet 8 Bereiche auf. Prüfen Sie jeden:
+
+#### III.1 – Biometrische Identifizierung
+KI-Systeme für Gesichts-/Fingerabdruck-/Iris-Erkennung **außerhalb** der verbotenen Fälle.
+**Beispiel Mittelstand**: Zutritts­kontrolle im Rechenzentrum mit Gesichtserkennung. → **High-Risk**.
+
+#### III.2 – Kritische Infrastruktur
+KI im Betrieb von Strom, Wasser, Gas, Wärme, Verkehr, digitaler Infrastruktur.
+**Beispiel**: Ein Netzbetreiber-Mittelständler nutzt KI zur Lastprognose. → **High-Risk**.
+
+#### III.3 – Bildung
+KI-Systeme, die den Zugang zu Bildung regeln oder Prüfungen bewerten.
+**Beispiel**: Ein Weiterbildungsanbieter nutzt KI-gestützte Prüfungsbewertung. → **High-Risk**.
+
+#### III.4 – Beschäftigung (sehr häufig!)
+
+Das ist der häufigste Fall im Mittelstand. KI-Systeme für:
+
+- Rekrutierung oder Auswahl von Bewerbern (CV-Parsing, Matching)
+- Entscheidungen über Beförderungen, Kündigungen oder Aufgabenverteilung
+- Überwachung und Bewertung von Arbeitsleistung
+
+**Konkret häufige Systeme**:
+
+- **Personio** mit KI-Matching → **High-Risk**
+- **SAP SuccessFactors** mit Recommendation-Engine → **High-Risk**
+- **LinkedIn Recruiter** mit AI-Suche → **High-Risk** (die Frage ist nur, wer der "Betreiber" ist – bei aktivem Nutzen: Sie)
+- **Tool zur Call-Qualitätsbewertung** mit Speech Analytics → **High-Risk**
+
+Fast jede größere HR-Software hat mittlerweile KI-Features. Wenn Sie eine solche Software einsetzen, ist es wahrscheinlich High-Risk.
+
+#### III.5 – Zugang zu Diensten
+
+KI in:
+
+- Bonitätsscoring / Kreditentscheidungen
+- Lebens- oder Krankenversicherungs-Preisfindung
+- Notrufsortierung
+- Entscheidungen über Sozialleistungen
+
+**Beispiel**: Ein Versicherungs-Mittelständler nutzt KI zum Underwriting von KFZ-Policen. → **High-Risk**.
+
+#### III.6 – Strafverfolgung
+
+Betrifft den Mittelstand praktisch nicht.
+
+#### III.7 – Migration, Asyl, Grenzkontrolle
+
+Betrifft den Mittelstand praktisch nicht.
+
+#### III.8 – Rechtspflege und demokratische Prozesse
+
+Betrifft hauptsächlich Gerichte und Wahlkommissionen.
+
+### Die wichtige Ausnahme: Art. 6 Abs. 3
+
+Selbst wenn Ihr System in Anhang III fällt, **kann es aus der High-Risk-Einstufung rauspurzeln**, wenn es:
+
+- nur vorbereitende Aufgaben erfüllt
+- nur die Ergebnisse menschlicher Tätigkeit verbessert
+- nur Muster in Entscheidungen erkennt, **ohne** diese zu ersetzen
+- nur vorbereitende Aufgaben für solche Entscheidungen erfüllt
+
+**Praxisbeispiel**: Ein HR-Tool, das Bewerbungen nur nach Stichworten sortiert, aber keinerlei Bewertung vornimmt, kann aus dem High-Risk fallen. **Aber**: Die Begründung dafür muss dokumentiert werden (Art. 6 Abs. 4).
+
+In Zweifelsfällen: als High-Risk behandeln. Die Pflichten sind beherrschbar – das Risiko einer Fehleinstufung ist nicht.
+
+---
+
+## Schritt 4: Transparenz-Pflichten? (Art. 50)
+
+Wenn Schritte 1–3 alle "nein" ergeben haben, prüfen Sie diese vier Fragen:
+
+1. **Interagiert das System mit Menschen?** (Chatbots, Voice-Agents)
+2. **Erzeugt das System synthetische Inhalte?** (Text, Bild, Audio, Video)
+3. **Verwendet es Emotionserkennung** (außerhalb der Verbote)?
+4. **Erzeugt es Deepfakes** (Bilder, die echten Personen ähneln)?
+
+Wenn eine Antwort "ja" ist: **Limited Risk**, und Sie haben Transparenzpflichten nach Art. 50:
+
+- Chatbots müssen sich als solche zu erkennen geben
+- Synthetische Inhalte müssen maschinell auslesbar gekennzeichnet sein
+- Deepfakes brauchen sichtbare Kennzeichnung
+- Emotion-Recognition-Nutzer müssen informiert werden
+
+Die Umsetzung ist vergleichsweise einfach. Meist reicht ein kurzer Hinweistext im UI.
+
+---
+
+## Schritt 5: Minimal Risk
+
+Wenn alle vorigen Schritte "nein" waren: **Minimal Risk**. Keine spezifischen Pflichten aus dem AI Act.
+
+**Aber**: Art. 4 AI Literacy gilt trotzdem. Und DSGVO gilt, wenn personenbezogene Daten verarbeitet werden. Minimal Risk heißt nicht "frei".
+
+---
+
+## Checkliste: 10 häufige Systeme im Mittelstand
+
+Als Schnelleinstieg hier die typische Klassifizierung der 10 häufigsten KI-Systeme:
+
+| System                               | Typische Klassifizierung       | Begründung                         |
+| ------------------------------------ | ------------------------------ | ---------------------------------- |
+| **ChatGPT Enterprise (Knowledge Work)** | Limited Risk                | Interagiert mit Menschen (Art. 50) |
+| **Microsoft Copilot im Office**       | Limited Risk                   | Erzeugt synthetischen Text         |
+| **GitHub Copilot (Dev)**              | Limited Risk                   | Erzeugt synthetischen Code (arguable: minimal) |
+| **DeepL Pro (Übersetzung)**           | Minimal Risk                   | Reine Übersetzung                  |
+| **Personio HR-Matching**              | **High-Risk** (Anhang III.4)   | Beschäftigungsentscheidungen       |
+| **Zendesk Answer Bot**                | Limited Risk                   | Chatbot (Art. 50)                  |
+| **Salesforce Einstein Lead Scoring**  | Minimal Risk                   | Reine Empfehlung ohne Beschäftigungs-Kontext |
+| **HubSpot AI Content Generator**      | Limited Risk                   | Synthetische Inhalte               |
+| **Midjourney / Canva AI Images**      | Limited Risk                   | Bild-Generation                    |
+| **Spam-Filter in Outlook**            | Minimal Risk                   | Einfache Klassifikation            |
+| **Call-Transkription mit Analysen**   | **High-Risk**, wenn zur Leistungsbewertung; sonst Limited | Kontextabhängig            |
+
+Das ist **keine Rechtsberatung**. Die genaue Einordnung hängt vom konkreten Einsatzzweck ab.
+
+---
+
+## Wie Sie die Klassifizierung dokumentieren
+
+Für jeden Fall, in dem Sie eine Klassifizierung getroffen haben, brauchen Sie ein einfaches Dokument mit:
+
+1. **Name des Systems**
+2. **Beschreibung des Einsatzzwecks**
+3. **Klassifizierungs-Ergebnis** (Prohibited / High-Risk / Limited / Minimal / GPAI)
+4. **Begründung** (welche Fragen zur Entscheidung geführt haben, welche Artikel betroffen sind)
+5. **Datum** und **verantwortliche Person**
+6. **Review-Datum** (mindestens jährlich, bei Änderungen häufiger)
+
+Das Dokument muss bei Audits vorzeigbar sein. Wir empfehlen ein zentrales Register, kein Sammelsurium von Word-Dateien.
+
+---
+
+## Wie ComplAI das automatisiert
+
+Unser [kostenloser Risiko-Check](/risiko-check) nimmt Ihnen die manuelle Arbeit ab: Sie beantworten die Fragen einmal durch den Wizard, bekommen das Ergebnis mit Begründung, Artikel-Referenzen und einer Liste der konkreten Pflichten – als PDF exportierbar.
+
+Im Pro-Plan können Sie das für unbegrenzt viele Systeme tun und haben alles versioniert an einem Ort. Bei Gesetzesänderungen triggern wir automatisch eine Re-Klassifizierung aller betroffenen Systeme.
+
+[→ Jetzt kostenlos testen](/risiko-check)
+
+---
+
+## Die wichtigste Regel zum Schluss
+
+**In Zweifelsfällen: als höhere Risikokategorie behandeln.**
+
+Die Pflichten für High-Risk sind beherrschbar. Die Konsequenzen einer Falsch­einstufung sind es nicht.
+
+Wenn Sie nicht sicher sind, ob ein System High-Risk ist: dokumentieren Sie Ihre Zweifel, treffen Sie vorläufig die konservative Entscheidung und holen Sie bei wirklich wichtigen Fällen eine juristische Zweitmeinung ein.
+
+---
+
+*Dieser Artikel stellt keine Rechtsberatung dar. Für rechtsverbindliche Auskünfte wenden Sie sich bitte an eine spezialisierte Kanzlei.*
