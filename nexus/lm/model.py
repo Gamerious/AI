@@ -234,6 +234,11 @@ class NexusLMConfig:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
     @classmethod
+    def tiny(cls):
+        """~2M real / ~6M eff. CPU-trainable."""
+        return cls(d_model=192, n_heads=4, d_ff=512, n_iterations=3, max_seq_len=256, dropout=0.1)
+
+    @classmethod
     def small(cls):
         """~22M real / ~88M eff. Quick experiments."""
         return cls(d_model=512, n_heads=8, d_ff=1536, n_iterations=4, max_seq_len=512)

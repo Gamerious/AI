@@ -206,7 +206,7 @@ def generate_sample(model, tokenizer, device, prompt="Once upon a time"):
 
 def main():
     parser = argparse.ArgumentParser(description="Train NEXUS Language Model")
-    parser.add_argument("--config", choices=["small", "base", "large"], default="base")
+    parser.add_argument("--config", choices=["tiny", "small", "base", "large"], default="base")
     parser.add_argument("--bs", type=int, default=None)
     parser.add_argument("--grad-accum", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=None)
@@ -255,17 +255,18 @@ def main():
         print(f"  Val:   {len(val_dataset):,} sequences × {val_data_raw['seq_len']} tokens", flush=True)
 
     # Config
-    config_map = {"small": NexusLMConfig.small, "base": NexusLMConfig.base, "large": NexusLMConfig.large}
+    config_map = {"tiny": NexusLMConfig.tiny, "small": NexusLMConfig.small,
+                  "base": NexusLMConfig.base, "large": NexusLMConfig.large}
     config = config_map[args.config]()
     config.vocab_size = tokenizer.vocab_size
     config.max_seq_len = seq_len
 
-    # Default batch sizes (tuned for 4060 8GB with AMP)
-    default_bs = {"small": 16, "base": 8, "large": 4}
+    # Default batch sizes (tuned for 4060 8GB with AMP; tiny for CPU)
+    default_bs = {"tiny": 8, "small": 16, "base": 8, "large": 4}
     batch_size = args.bs or default_bs[args.config]
 
     # Default steps
-    default_steps = {"small": 30000, "base": 50000, "large": 80000}
+    default_steps = {"tiny": 5000, "small": 30000, "base": 50000, "large": 80000}
     max_steps = args.max_steps or default_steps[args.config]
 
     # Create model
