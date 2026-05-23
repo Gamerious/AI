@@ -9,6 +9,8 @@ build/
 *.pth
 *.ckpt
 data/
+lm_data/
+lm_checkpoints/
 checkpoints/
 wandb/
 logs/
