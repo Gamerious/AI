@@ -48,7 +48,7 @@ def train(
     model, train_data, val_data, max_steps, lr=3e-4, warmup=1000,
     batch_size=16, grad_accum=1, log_every=100, eval_every=1000,
     device="cuda", use_amp=True, checkpoint_dir="lm_checkpoints",
-    tokenizer=None,
+    tokenizer=None, resume_ckpt=None,
 ):
     """Train the language model."""
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -72,7 +72,19 @@ def train(
     running_loss = 0
     n_loss = 0
     best_val_loss = float('inf')
+
+    if resume_ckpt is not None:
+        if "optimizer_state_dict" in resume_ckpt:
+            optimizer.load_state_dict(resume_ckpt["optimizer_state_dict"])
+            print(f"  Loaded optimizer state from checkpoint", flush=True)
+        if "step" in resume_ckpt:
+            step = int(resume_ckpt["step"])
+            print(f"  Resuming from step {step}", flush=True)
+        if "val_loss" in resume_ckpt:
+            best_val_loss = float(resume_ckpt["val_loss"])
+
     t_start = time.time()
+    t_offset_steps = step  # for accurate step/s & ETA after resume
 
     while step < max_steps:
         for batch in train_loader:
@@ -115,7 +127,7 @@ def train(
                 avg_loss = running_loss / n_loss
                 ppl = math.exp(min(avg_loss, 20))
                 elapsed = time.time() - t_start
-                steps_per_sec = step / max(1, elapsed)
+                steps_per_sec = max(1, step - t_offset_steps) / max(1, elapsed)
                 eta = (max_steps - step) / max(0.01, steps_per_sec)
                 print(
                     f"  Step {step:>6}/{max_steps} | "
@@ -214,7 +226,31 @@ def main():
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--detach-state", action="store_true",
+                        help="Reproduce the original buggy CISA (GRU frozen, no grad into state)")
+    parser.add_argument("--n-iter", type=int, default=None,
+                        help="Override n_iterations (for ablations, e.g. 1)")
+    parser.add_argument("--gate-init", type=float, default=None,
+                        help="Override temporal_gate init logit (-2.0=12%%, -1.0=27%%, 0.0=50%%)")
+    # NEXUS-2 fixes (orthogonal, individually A/B-able)
+    parser.add_argument("--gate-mode", choices=["logbias", "channel"], default=None,
+                        help="A1: spatial/temporal mixing (channel = separate softmax + channel gate)")
+    parser.add_argument("--nope-temporal", action="store_true", help="A2: NoPE query for temporal path")
+    parser.add_argument("--qk-norm", action="store_true", help="A3: QK-Norm on q/k")
+    parser.add_argument("--stabilize", action="store_true", help="A4: no-tanh state_init + GRU-input RMSNorm + ReZero iter_emb")
+    parser.add_argument("--deep-supervision", action="store_true", help="LM loss after every iteration")
+    parser.add_argument("--cisa-v2", action="store_true",
+                        help="Shortcut: enable A1(channel)+A2+A3+A4+deep-supervision together")
     args = parser.parse_args()
+
+    # --cisa-v2 shortcut: turn on the whole NEXUS-2 Stage-1 bundle
+    if args.cisa_v2:
+        if args.gate_mode is None:
+            args.gate_mode = "channel"
+        args.nope_temporal = True
+        args.qk_norm = True
+        args.stabilize = True
+        args.deep_supervision = True
 
     # Device
     if args.cpu or not torch.cuda.is_available():
@@ -260,6 +296,17 @@ def main():
     config = config_map[args.config]()
     config.vocab_size = tokenizer.vocab_size
     config.max_seq_len = seq_len
+    config.detach_state_history = args.detach_state
+    if args.n_iter is not None:
+        config.n_iterations = args.n_iter
+    if args.gate_init is not None:
+        config.temporal_gate_init = args.gate_init
+    if args.gate_mode is not None:
+        config.gate_mode = args.gate_mode
+    config.nope_temporal = args.nope_temporal
+    config.qk_norm = args.qk_norm
+    config.stabilize = args.stabilize
+    config.deep_supervision = args.deep_supervision
 
     # Default batch sizes (tuned for 4060 8GB with AMP; tiny for CPU)
     default_bs = {"tiny": 8, "small": 16, "base": 8, "large": 4}
@@ -269,14 +316,40 @@ def main():
     default_steps = {"tiny": 5000, "small": 30000, "base": 50000, "large": 80000}
     max_steps = args.max_steps or default_steps[args.config]
 
+    # Run name -> isolates checkpoints/final model per variant (no clobbering!)
+    run_name = args.config
+    if args.detach_state:
+        run_name += "_detach"
+    if args.n_iter is not None:
+        run_name += f"_iter{args.n_iter}"
+    if args.gate_init is not None:
+        run_name += f"_gate{args.gate_init}"
+    if args.cisa_v2:
+        run_name += "_v2"
+    else:
+        if args.gate_mode == "channel":
+            run_name += "_chan"
+        if args.nope_temporal:
+            run_name += "_nope"
+        if args.qk_norm:
+            run_name += "_qknorm"
+        if args.stabilize:
+            run_name += "_stab"
+        if args.deep_supervision:
+            run_name += "_ds"
+    if run_name == args.config:
+        run_name += "_fixed"  # the corrected-CISA run
+    checkpoint_dir = f"lm_checkpoints_{run_name}"
+
     # Create model
     model = NexusLM(config).to(device)
     params = model.count_parameters()
 
+    resume_ckpt = None
     if args.resume:
         print(f"  Resuming from {args.resume}...", flush=True)
-        ckpt = torch.load(args.resume, map_location=device, weights_only=False)
-        model.load_state_dict(ckpt["model_state_dict"])
+        resume_ckpt = torch.load(args.resume, map_location=device, weights_only=False)
+        model.load_state_dict(resume_ckpt["model_state_dict"])
 
     print(f"\n{'='*70}")
     print(f"  NEXUS-LM {args.config.upper()} Training")
@@ -285,6 +358,10 @@ def main():
     print(f"  n_heads:     {config.n_heads}")
     print(f"  d_ff:        {config.d_ff}")
     print(f"  iterations:  {config.n_iterations} (CISA depth)")
+    print(f"  CISA state:  {'DETACHED (buggy/frozen GRU)' if config.detach_state_history else 'LEARNED (fixed - GRU trains)'}")
+    print(f"  NEXUS-2:     gate={config.gate_mode} nope={config.nope_temporal} qk_norm={config.qk_norm} "
+          f"stabilize={config.stabilize} deep_sup={config.deep_supervision}")
+    print(f"  run name:    {run_name}  ->  checkpoints in {checkpoint_dir}/")
     print(f"  max_seq_len: {config.max_seq_len}")
     print(f"  vocab_size:  {config.vocab_size}")
     print(f"  Real params:      {params['total_params']:>12,}")
@@ -305,12 +382,12 @@ def main():
         max_steps=max_steps, lr=args.lr, warmup=min(2000, max_steps // 10),
         batch_size=batch_size, grad_accum=args.grad_accum,
         log_every=100, eval_every=2000,
-        device=device, use_amp=use_amp,
-        tokenizer=tokenizer,
+        device=device, use_amp=use_amp, checkpoint_dir=checkpoint_dir,
+        tokenizer=tokenizer, resume_ckpt=resume_ckpt,
     )
 
     # Save final model
-    final_path = f"nexus_lm_{args.config}.pt"
+    final_path = f"nexus_lm_{run_name}.pt"
     torch.save({
         "model_state_dict": model.state_dict(),
         "config": config.to_dict(),

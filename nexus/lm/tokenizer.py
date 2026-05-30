@@ -174,7 +174,7 @@ class BPETokenizer:
 
             if verbose and (merge_idx + 1) % 500 == 0:
                 print(f"    Merge {merge_idx+1}/{n_merges}: "
-                      f"({best_pair[0]}, {best_pair[1]}) → {next_id-1} "
+                      f"({best_pair[0]}, {best_pair[1]}) -> {next_id-1} "
                       f"(count={best_count:,})")
 
         self.vocab_size = next_id

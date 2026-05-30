@@ -43,6 +43,20 @@ def apply_rotary_emb(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
+class RMSNorm(nn.Module):
+    """RMSNorm over the last dim (version-proof, learnable gain)."""
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        dt = x.dtype
+        x = x.float()
+        x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return (x * self.weight).to(dt)
+
+
 # ============================================================
 # Cross-Iteration State Attention (LM version)
 # ============================================================
@@ -56,9 +70,14 @@ class CISAttention(nn.Module):
     - Optimized for longer sequences
     """
 
-    def __init__(self, d_model: int, n_heads: int, max_iterations: int, dropout: float = 0.0):
+    def __init__(self, d_model: int, n_heads: int, max_iterations: int, dropout: float = 0.0,
+                 temporal_gate_init: float = -2.0, gate_mode: str = "logbias",
+                 nope_temporal: bool = False, qk_norm: bool = False):
         super().__init__()
         assert d_model % n_heads == 0
+        self.gate_mode = gate_mode
+        self.nope_temporal = nope_temporal
+        self.qk_norm = qk_norm
         self.d_model = d_model
         self.n_heads = n_heads
         self.d_head = d_model // n_heads
@@ -76,8 +95,22 @@ class CISAttention(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model, bias=False)
         self.attn_dropout = nn.Dropout(dropout)
 
-        # Temporal gate (learned, starts small)
-        self.temporal_gate = nn.Parameter(torch.tensor(-2.0))
+        # Temporal gate (learned, starts small). Channel-wise (D,) for "channel"
+        # mode, scalar for the original "logbias" mode.
+        if gate_mode == "channel":
+            self.temporal_gate = nn.Parameter(torch.full((d_model,), float(temporal_gate_init)))
+        else:
+            self.temporal_gate = nn.Parameter(torch.tensor(float(temporal_gate_init)))
+
+        # A3: QK-Norm (per-head RMSNorm on queries/keys before the dot-product).
+        if qk_norm:
+            self.q_norm = RMSNorm(self.d_head)
+            self.k_norm = RMSNorm(self.d_head)
+            self.k_state_norm = RMSNorm(self.d_head)
+
+        # Runtime switch: force spatial-only (used for the 0-cost ablation test
+        # "does the cross-iteration state path contribute anything at all?").
+        self.disable_temporal = False
 
     def forward(
         self,
@@ -95,7 +128,13 @@ class CISAttention(nn.Module):
         k = self.k_proj(x).view(B, N, H, dh).transpose(1, 2)
         v = self.v_proj(x).view(B, N, H, dh).transpose(1, 2)
 
-        # Apply RoPE
+        # A3: QK-Norm before RoPE / dot-products
+        if self.qk_norm:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
+
+        # A2: keep a pre-RoPE query for the temporal (iteration-axis) path
+        q_nope = q
         q, k = apply_rotary_emb(q, k, freqs_cis)
 
         # Spatial attention with causal mask
@@ -105,38 +144,45 @@ class CISAttention(nn.Module):
         )
         spatial_scores.masked_fill_(causal_mask.unsqueeze(0).unsqueeze(0), float('-inf'))
 
-        # Temporal attention
-        if len(state_history) > 0 and iteration > 0:
+        has_temporal = len(state_history) > 0 and iteration > 0 and not self.disable_temporal
+
+        if has_temporal:
             past_states = torch.stack(state_history[:iteration], dim=1)  # (B, T, N, D)
             T = past_states.shape[1]
-
             k_temporal = self.k_state_proj(past_states).view(B, T, N, H, dh).permute(0, 3, 2, 1, 4)
             v_temporal = self.v_state_proj(past_states).view(B, T, N, H, dh).permute(0, 3, 2, 1, 4)
+            if self.qk_norm:
+                k_temporal = self.k_state_norm(k_temporal)
 
-            q_expanded = q.unsqueeze(-2)
+            q_t = (q_nope if self.nope_temporal else q).unsqueeze(-2)  # (B, H, N, 1, dh)
             temporal_scores = torch.matmul(
-                q_expanded, k_temporal.transpose(-2, -1)
-            ).squeeze(-2) * self.scale
+                q_t, k_temporal.transpose(-2, -1)
+            ).squeeze(-2) * self.scale  # (B, H, N, T)
 
-            temporal_bias = torch.sigmoid(self.temporal_gate)
-            temporal_scores = temporal_scores + temporal_bias.log()
-
-            all_scores = torch.cat([spatial_scores, temporal_scores], dim=-1)
-            all_weights = self.attn_dropout(F.softmax(all_scores, dim=-1))
-
-            spatial_weights = all_weights[:, :, :, :N]
-            temporal_weights = all_weights[:, :, :, N:]
-
-            spatial_out = torch.matmul(spatial_weights, v)
-            temporal_weights_exp = temporal_weights.unsqueeze(-1)
-            temporal_out = (temporal_weights_exp * v_temporal).sum(dim=-2)
-
-            out = spatial_out + temporal_out
+            if self.gate_mode == "channel":
+                # A1: separate softmaxes + multiplicative channel-wise gate.
+                spatial_weights = self.attn_dropout(F.softmax(spatial_scores, dim=-1))
+                temporal_weights = self.attn_dropout(F.softmax(temporal_scores, dim=-1))
+                spatial_out = torch.matmul(spatial_weights, v)
+                temporal_out = (temporal_weights.unsqueeze(-1) * v_temporal).sum(dim=-2)
+                spatial_out = spatial_out.transpose(1, 2).reshape(B, N, D)
+                temporal_out = temporal_out.transpose(1, 2).reshape(B, N, D)
+                g = torch.sigmoid(self.temporal_gate)  # (D,)
+                out = spatial_out + g * temporal_out
+            else:
+                # Original: gate as log-bias inside a shared softmax.
+                temporal_scores = temporal_scores + torch.sigmoid(self.temporal_gate).log()
+                all_scores = torch.cat([spatial_scores, temporal_scores], dim=-1)
+                all_weights = self.attn_dropout(F.softmax(all_scores, dim=-1))
+                spatial_weights = all_weights[:, :, :, :N]
+                temporal_weights = all_weights[:, :, :, N:]
+                spatial_out = torch.matmul(spatial_weights, v)
+                temporal_out = (temporal_weights.unsqueeze(-1) * v_temporal).sum(dim=-2)
+                out = (spatial_out + temporal_out).transpose(1, 2).reshape(B, N, D)
         else:
             spatial_weights = self.attn_dropout(F.softmax(spatial_scores, dim=-1))
-            out = torch.matmul(spatial_weights, v)
+            out = torch.matmul(spatial_weights, v).transpose(1, 2).reshape(B, N, D)
 
-        out = out.transpose(1, 2).contiguous().view(B, N, D)
         return self.out_proj(out)
 
 
@@ -168,11 +214,18 @@ class NexusLMCell(nn.Module):
     """Recursive cell with CISA, GRU state, SwiGLU FFN."""
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int,
-                 max_iterations: int, dropout: float = 0.0):
+                 max_iterations: int, dropout: float = 0.0,
+                 temporal_gate_init: float = -2.0, gate_mode: str = "logbias",
+                 nope_temporal: bool = False, qk_norm: bool = False,
+                 stabilize: bool = False):
         super().__init__()
+        self.stabilize = stabilize
 
         self.attn_norm = nn.LayerNorm(d_model)
-        self.attention = CISAttention(d_model, n_heads, max_iterations, dropout)
+        self.attention = CISAttention(d_model, n_heads, max_iterations, dropout,
+                                      temporal_gate_init=temporal_gate_init,
+                                      gate_mode=gate_mode, nope_temporal=nope_temporal,
+                                      qk_norm=qk_norm)
         self.ffn_norm = nn.LayerNorm(d_model)
 
         # SwiGLU FFN
@@ -186,14 +239,22 @@ class NexusLMCell(nn.Module):
         self.state_update = GRUStateUpdate(d_model)
         self.iter_embeddings = nn.Embedding(max_iterations, d_model)
 
+        # A4: ReZero-scaled iteration embedding + RMSNorm on the GRU input.
+        if stabilize:
+            self.iter_scale = nn.Parameter(torch.zeros(1))
+            self.state_norm = RMSNorm(d_model)
+
     def forward(self, x, state, state_history, iteration, freqs_cis):
         B, N, D = x.shape
 
-        # Iteration embedding
+        # Iteration embedding (A4: ReZero-scaled so it doesn't inflate the stream)
         iter_emb = self.iter_embeddings(
             torch.full((B, N), iteration, dtype=torch.long, device=x.device)
         )
-        x = x + iter_emb
+        if self.stabilize:
+            x = x + torch.tanh(self.iter_scale) * iter_emb
+        else:
+            x = x + iter_emb
 
         # CISA + residual
         attn_out = self.attention(self.attn_norm(x), state_history, iteration, freqs_cis)
@@ -204,8 +265,9 @@ class NexusLMCell(nn.Module):
         ffn_out = self.ffn_down(F.silu(self.ffn_gate(h)) * self.ffn_up(h))
         x = x + self.ffn_drop(ffn_out)
 
-        # Update state
-        new_state = self.state_update(state, x)
+        # Update state (A4: normalize the GRU input so its scale doesn't drift)
+        gru_in = self.state_norm(x) if self.stabilize else x
+        new_state = self.state_update(state, gru_in)
 
         return x, new_state
 
@@ -225,6 +287,31 @@ class NexusLMConfig:
     max_iterations: int = 8
     dropout: float = 0.1
     rope_theta: float = 10000.0
+    # Initial value of the temporal_gate logit. sigmoid(-2.0)=0.12 (original,
+    # heavily throttles the cross-iteration/state path). Higher = state path
+    # contributes more from the start. -1.0=0.27, 0.0=0.50.
+    temporal_gate_init: float = -2.0
+    # A1: how spatial & temporal attention are mixed.
+    #  "logbias" = original (gate as log-bias in a shared softmax -> gate gets ~0 gradient).
+    #  "channel" = separate softmaxes + multiplicative channel-wise gate (out = spatial + sigmoid(gate_D)*temporal).
+    gate_mode: str = "logbias"
+    # A2: if True, the temporal path uses the pre-RoPE (NoPE) query (the iteration
+    # axis has no positional meaning, so RoPE there is just noise).
+    nope_temporal: bool = False
+    # A3: RMSNorm on q/k (and temporal keys) before the dot-product -> balances
+    # spatial/temporal key scales, allows higher LR.
+    qk_norm: bool = False
+    # A4: training-stability bundle: state_init without tanh, RMSNorm on the GRU
+    # input, and a ReZero-scaled iteration embedding (iter_scale zero-init).
+    stabilize: bool = False
+    # Deep supervision: compute the LM loss after EVERY iteration (ascending
+    # weights), so each iteration gets an O(1) gradient signal. Train-time only.
+    deep_supervision: bool = False
+    # If True, reproduce the (buggy) original behavior: state history is
+    # detached, so the GRU state-update + state_init get NO gradient and stay
+    # frozen at init. Default False = correct CISA (BPTT flows through the
+    # cross-iteration state, GRU actually learns).
+    detach_state_history: bool = False
 
     def to_dict(self):
         return {k: v for k, v in self.__dict__.items()}
@@ -286,6 +373,11 @@ class NexusLM(nn.Module):
             d_ff=config.d_ff,
             max_iterations=config.max_iterations,
             dropout=config.dropout,
+            temporal_gate_init=config.temporal_gate_init,
+            gate_mode=config.gate_mode,
+            nope_temporal=config.nope_temporal,
+            qk_norm=config.qk_norm,
+            stabilize=config.stabilize,
         )
 
         # Output
@@ -310,31 +402,52 @@ class NexusLM(nn.Module):
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0, std=0.02)
 
+    def _lm_loss(self, logits, labels):
+        # Shift: predict next token
+        shift_logits = logits[:, :-1].contiguous()
+        shift_labels = labels[:, 1:].contiguous()
+        return F.cross_entropy(
+            shift_logits.view(-1, self.config.vocab_size),
+            shift_labels.view(-1),
+            ignore_index=-100,
+        )
+
     def forward(self, input_ids: torch.Tensor, labels: Optional[torch.Tensor] = None):
         B, N = input_ids.shape
 
         x = self.emb_dropout(self.token_emb(input_ids))
-        state = torch.tanh(self.state_init(x))
+        # A4: state_init without the saturating tanh
+        state = self.state_init(x) if self.config.stabilize else torch.tanh(self.state_init(x))
+
+        deep = self.config.deep_supervision and self.training and labels is not None
+        if deep:
+            ds_weights = torch.linspace(0.5, 1.0, self.config.n_iterations, device=x.device)
+        ds_loss, ds_wsum, logits = 0.0, 0.0, None
 
         state_history: List[torch.Tensor] = []
         for iteration in range(self.config.n_iterations):
-            state_history.append(state.detach().clone())
+            if self.config.detach_state_history:
+                # Original (buggy) path: no gradient into the state -> GRU frozen.
+                state_history.append(state.detach().clone())
+            else:
+                # Correct CISA: keep the state in the autograd graph so the
+                # cross-iteration attention teaches the GRU to produce useful states.
+                state_history.append(state)
             x, state = self.cell(x, state, state_history, iteration, self.freqs_cis)
 
-        x = self.out_norm(x)
-        logits = self.lm_head(x)
+            if deep:
+                # Deep supervision: LM loss after every iteration (ascending weight)
+                logits = self.lm_head(self.out_norm(x))
+                w = ds_weights[iteration]
+                ds_loss = ds_loss + w * self._lm_loss(logits, labels)
+                ds_wsum = ds_wsum + w
+
+        if logits is None:
+            logits = self.lm_head(self.out_norm(x))
 
         result = {"logits": logits}
         if labels is not None:
-            # Shift: predict next token
-            shift_logits = logits[:, :-1].contiguous()
-            shift_labels = labels[:, 1:].contiguous()
-            loss = F.cross_entropy(
-                shift_logits.view(-1, self.config.vocab_size),
-                shift_labels.view(-1),
-                ignore_index=-100,
-            )
-            result["loss"] = loss
+            result["loss"] = (ds_loss / ds_wsum) if deep else self._lm_loss(logits, labels)
 
         return result
 

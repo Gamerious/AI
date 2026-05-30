@@ -45,15 +45,18 @@ def download_tinystories(data_dir):
     # We'll download the train and validation splits
     base_url = "https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main"
 
-    for split in ["train", "validation"]:
-        output_file = os.path.join(data_dir, f"tinystories_{split}.txt")
+    # HuggingFace uses "valid" in the filename, but we store as "validation" locally
+    # so load_texts() can find it.
+    splits = [("train", "train"), ("validation", "valid")]
+    for local_name, remote_name in splits:
+        output_file = os.path.join(data_dir, f"tinystories_{local_name}.txt")
         if os.path.exists(output_file):
             size_mb = os.path.getsize(output_file) / (1024 * 1024)
-            print(f"  {split}: already exists ({size_mb:.0f} MB)", flush=True)
+            print(f"  {local_name}: already exists ({size_mb:.0f} MB)", flush=True)
             continue
 
-        url = f"{base_url}/TinyStoriesV2-GPT4-{split}.txt"
-        print(f"  Downloading {split} from HuggingFace...", flush=True)
+        url = f"{base_url}/TinyStoriesV2-GPT4-{remote_name}.txt"
+        print(f"  Downloading {local_name} from HuggingFace...", flush=True)
         print(f"  URL: {url}", flush=True)
 
         try:
