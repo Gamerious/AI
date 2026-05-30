@@ -1,0 +1,16 @@
+# NEXUS-LM dependencies
+#
+# WICHTIG fuer RunPod: Das "RunPod PyTorch"-Template bringt torch (mit der
+# passenden CUDA-Version) bereits mit. Dort NICHT `pip install torch` ausfuehren
+# -> das wuerde den CUDA-Build ueberschreiben. setup_runpod.sh installiert nur
+# die fehlenden Extras (requests).
+#
+# Auf einem frischen Rechen OHNE torch: erst torch passend zur CUDA-Version
+# installieren (siehe https://pytorch.org), dann `pip install -r requirements.txt`.
+
+torch>=2.4            # GRU-State/BPTT + AMP; RMSNorm-Pfad version-proof implementiert
+requests>=2.28        # prepare_lm_data.py: TinyStories-Download
+numpy
+
+# Optional, nur fuer die lokale Web-UI (webapp.py) - fuer Training NICHT noetig:
+# gradio>=4
