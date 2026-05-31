@@ -1,1 +1,1 @@
-# NeuroSpark AI - Training utilities
+# Task-model training utilities (NEXUS task model)

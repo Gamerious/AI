@@ -1,8 +1,10 @@
 """
-NeuroSpark Comprehensive Evaluation Framework
+Comprehensive Task Evaluation Framework
 
-Evaluates the model on each task type independently,
+Evaluates a model on each task type independently,
 measuring accuracy, loss, and adaptive behavior metrics.
+Model-agnostic: works with any module exposing the task-model interface
+(used by the NEXUS task model).
 """
 
 import sys
@@ -10,20 +12,20 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from typing import Dict, List, Optional
 from collections import defaultdict
 import time
 
-from core.model import NeuroSparkModel, NeuroSparkConfig
 from training.tasks import CombinedTaskDataset, PAD
 
 
 class TaskEvaluator:
     """Evaluates model performance on each task independently."""
 
-    def __init__(self, model: NeuroSparkModel, device: str = "cpu"):
+    def __init__(self, model: nn.Module, device: str = "cpu"):
         self.model = model
         self.device = device
 

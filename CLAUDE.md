@@ -44,9 +44,11 @@ eval_nexus.py           # Quick eval of a saved model
 train_nexus.py          # Task model training (older, not for LM)
 train_nexus_gpu.py      # GPU training for task model
 
-# Old work - DO NOT TOUCH unless asked
-core/, modules/         # NeuroSpark (old)
-prometheus/             # Prometheus (failed predecessor)
+training/               # Task-model framework: tasks.py + evaluator.py (model-agnostic)
+
+# REMOVED from main: NeuroSpark (core/, modules/, configs/) and Prometheus
+# (prometheus/) were deleted as failed predecessors. They remain on branch
+# claude/advanced-ai-architecture-VSb4j if ever needed for reference.
 ```
 
 ---
