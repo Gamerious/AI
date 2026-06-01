@@ -32,7 +32,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from nexus.lm.model import NexusLM, NexusLMConfig
 from nexus.lm.tokenizer import BPETokenizer
-from nexus.lm.data import MemmapTokenDataset, load_meta, has_bin_data
+from nexus.lm.data import (MemmapTokenDataset, ChatMemmapDataset,
+                           load_meta, has_bin_data, is_chat_data)
 from nexus.lm.fast_tokenizer import FastTokenizer
 
 
@@ -98,7 +99,11 @@ def train(
                 pg["lr"] = current_lr
 
             input_ids = batch[0].to(device, non_blocking=True)
-            labels = input_ids.clone()  # For LM, labels = input (model shifts internally)
+            # Chat SFT datasets return (tokens, masked_labels); LM datasets return (tokens,)
+            if len(batch) > 1:
+                labels = batch[1].to(device, non_blocking=True)
+            else:
+                labels = input_ids.clone()  # LM: labels = input (model shifts internally)
 
             if use_scaler:
                 with torch.amp.autocast("cuda"):
@@ -189,7 +194,7 @@ def evaluate(model, val_loader, device, use_amp):
     n = 0
     for batch in val_loader:
         input_ids = batch[0].to(device)
-        labels = input_ids.clone()
+        labels = batch[1].to(device) if len(batch) > 1 else input_ids.clone()
         if use_amp and device == "cuda":
             with torch.amp.autocast("cuda"):
                 outputs = model(input_ids=input_ids, labels=labels)
@@ -273,23 +278,41 @@ def main():
         if args.data_dir else DATA_DIR
     web_mode = has_bin_data(data_dir)
 
+    chat_mode = web_mode and is_chat_data(data_dir)
+
     if web_mode:
-        # ---- Web-scale memmap path (FineWeb-Edu, fast tokenizer) ----
+        # ---- memmap path (fast tokenizer): web pretrain OR chat SFT ----
         meta = load_meta(data_dir)
         tokenizer_dir = os.path.join(data_dir, "tokenizer")
         tokenizer = FastTokenizer.load(tokenizer_dir)
         seq_len = meta["seq_len"]
-        print(f"  Data:      {data_dir} (web/memmap, source={meta.get('source','?')})", flush=True)
-        print(f"  Tokenizer: fast, vocab_size={tokenizer.vocab_size}", flush=True)
 
-        train_dataset = MemmapTokenDataset(os.path.join(data_dir, "train.bin"), seq_len)
-        print(f"  Train: {meta['n_train_tokens']:,} tokens "
-              f"({len(train_dataset):,} seqs × {seq_len})", flush=True)
-        val_dataset = None
-        if os.path.exists(os.path.join(data_dir, "val.bin")):
-            val_dataset = MemmapTokenDataset(os.path.join(data_dir, "val.bin"), seq_len)
-            print(f"  Val:   {meta['n_val_tokens']:,} tokens "
-                  f"({len(val_dataset):,} seqs × {seq_len})", flush=True)
+        if chat_mode:
+            print(f"  Data:      {data_dir} (chat SFT, source={meta.get('source','?')}, "
+                  f"trainable={meta.get('trainable_frac','?')})", flush=True)
+            print(f"  Tokenizer: fast, vocab_size={tokenizer.vocab_size}", flush=True)
+            train_dataset = ChatMemmapDataset(
+                os.path.join(data_dir, "tokens.bin"), os.path.join(data_dir, "mask.bin"), seq_len)
+            print(f"  Train: {meta['n_train_tokens']:,} tokens "
+                  f"({len(train_dataset):,} seqs × {seq_len})", flush=True)
+            val_dataset = None
+            if os.path.exists(os.path.join(data_dir, "val_tokens.bin")):
+                val_dataset = ChatMemmapDataset(
+                    os.path.join(data_dir, "val_tokens.bin"),
+                    os.path.join(data_dir, "val_mask.bin"), seq_len)
+                print(f"  Val:   {meta['n_val_tokens']:,} tokens "
+                      f"({len(val_dataset):,} seqs × {seq_len})", flush=True)
+        else:
+            print(f"  Data:      {data_dir} (web/memmap, source={meta.get('source','?')})", flush=True)
+            print(f"  Tokenizer: fast, vocab_size={tokenizer.vocab_size}", flush=True)
+            train_dataset = MemmapTokenDataset(os.path.join(data_dir, "train.bin"), seq_len)
+            print(f"  Train: {meta['n_train_tokens']:,} tokens "
+                  f"({len(train_dataset):,} seqs × {seq_len})", flush=True)
+            val_dataset = None
+            if os.path.exists(os.path.join(data_dir, "val.bin")):
+                val_dataset = MemmapTokenDataset(os.path.join(data_dir, "val.bin"), seq_len)
+                print(f"  Val:   {meta['n_val_tokens']:,} tokens "
+                      f"({len(val_dataset):,} seqs × {seq_len})", flush=True)
     else:
         # ---- TinyStories .pt path (zero-dep BPE) ----
         tokenizer_dir = os.path.join(data_dir, "tokenizer")
@@ -345,7 +368,9 @@ def main():
 
     # Run name -> isolates checkpoints/final model per variant (no clobbering!)
     run_name = args.config
-    if web_mode:
+    if chat_mode:
+        run_name += "_sft"
+    elif web_mode:
         run_name += "_web"
     if args.detach_state:
         run_name += "_detach"

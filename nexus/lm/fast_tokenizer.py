@@ -42,6 +42,10 @@ class FastTokenizer:
         trainer = trainers.BpeTrainer(
             vocab_size=vocab_size,
             special_tokens=SPECIAL_TOKENS,  # added first -> ids 0..3
+            # Seed the FULL 256-byte alphabet so ANY text round-trips losslessly
+            # (without this, bytes unseen in training become <unk> - breaks rare
+            # chars and the <|role|> chat markers).
+            initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
             show_progress=True,
         )
         tk.train_from_iterator(text_iter, trainer=trainer, length=length)
