@@ -107,7 +107,8 @@ def main():
     docs = []
     n_chars = 0
     t0 = time.time()
-    for t in stream_docs(args.sample):
+    gen = stream_docs(args.sample)  # keep a live ref so its streaming threads aren't GC'd mid-run
+    for t in gen:
         docs.append(t)
         n_chars += len(t)
         if len(docs) % 100_000 == 0:
@@ -177,6 +178,13 @@ def main():
     print(f"\n  Train on it:")
     print(f"    python train_nexus_lm.py --config base --data-dir {os.path.basename(args.out)} --cisa-v2")
     print("=" * 70, flush=True)
+
+    # All output is written above. datasets' streaming worker threads raise
+    # std::terminate when GC'd at normal interpreter exit, which would make the
+    # process report a spurious non-zero exit. We've finished and flushed, so
+    # hard-exit before teardown to keep the exit code clean.
+    sys.stdout.flush()
+    os._exit(0)
 
 
 if __name__ == "__main__":
