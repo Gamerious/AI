@@ -32,6 +32,8 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from nexus.lm.model import NexusLM, NexusLMConfig
 from nexus.lm.tokenizer import BPETokenizer
+from nexus.lm.data import MemmapTokenDataset, load_meta, has_bin_data
+from nexus.lm.fast_tokenizer import FastTokenizer
 
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lm_data")
@@ -219,6 +221,10 @@ def generate_sample(model, tokenizer, device, prompt="Once upon a time"):
 def main():
     parser = argparse.ArgumentParser(description="Train NEXUS Language Model")
     parser.add_argument("--config", choices=["tiny", "small", "base", "large"], default="base")
+    parser.add_argument("--data-dir", type=str, default=None,
+                        help="Data directory. Default 'lm_data' (TinyStories .pt). "
+                             "Point at a web dir (e.g. lm_data_web) with train.bin/val.bin "
+                             "for memmap web-scale training.")
     parser.add_argument("--bs", type=int, default=None)
     parser.add_argument("--grad-accum", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=None)
@@ -262,33 +268,54 @@ def main():
         use_amp = not args.no_amp
         print(f"  Device: {torch.cuda.get_device_name(0)}", flush=True)
 
-    # Load tokenizer
-    tokenizer_dir = os.path.join(DATA_DIR, "tokenizer")
-    if not os.path.exists(os.path.join(tokenizer_dir, "tokenizer.json")):
-        print("  ERROR: Tokenizer not found! Run prepare_lm_data.py first.", flush=True)
-        sys.exit(1)
-    tokenizer = BPETokenizer.load(tokenizer_dir)
-    print(f"  Tokenizer: vocab_size={tokenizer.vocab_size}", flush=True)
+    # Resolve data directory (default = TinyStories lm_data; web dir holds .bin)
+    data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.data_dir) \
+        if args.data_dir else DATA_DIR
+    web_mode = has_bin_data(data_dir)
 
-    # Load data
-    train_path = os.path.join(DATA_DIR, "train.pt")
-    val_path = os.path.join(DATA_DIR, "val.pt")
+    if web_mode:
+        # ---- Web-scale memmap path (FineWeb-Edu, fast tokenizer) ----
+        meta = load_meta(data_dir)
+        tokenizer_dir = os.path.join(data_dir, "tokenizer")
+        tokenizer = FastTokenizer.load(tokenizer_dir)
+        seq_len = meta["seq_len"]
+        print(f"  Data:      {data_dir} (web/memmap, source={meta.get('source','?')})", flush=True)
+        print(f"  Tokenizer: fast, vocab_size={tokenizer.vocab_size}", flush=True)
 
-    if not os.path.exists(train_path):
-        print("  ERROR: Training data not found! Run prepare_lm_data.py first.", flush=True)
-        sys.exit(1)
+        train_dataset = MemmapTokenDataset(os.path.join(data_dir, "train.bin"), seq_len)
+        print(f"  Train: {meta['n_train_tokens']:,} tokens "
+              f"({len(train_dataset):,} seqs × {seq_len})", flush=True)
+        val_dataset = None
+        if os.path.exists(os.path.join(data_dir, "val.bin")):
+            val_dataset = MemmapTokenDataset(os.path.join(data_dir, "val.bin"), seq_len)
+            print(f"  Val:   {meta['n_val_tokens']:,} tokens "
+                  f"({len(val_dataset):,} seqs × {seq_len})", flush=True)
+    else:
+        # ---- TinyStories .pt path (zero-dep BPE) ----
+        tokenizer_dir = os.path.join(data_dir, "tokenizer")
+        if not os.path.exists(os.path.join(tokenizer_dir, "tokenizer.json")):
+            print("  ERROR: Tokenizer not found! Run prepare_lm_data.py first.", flush=True)
+            sys.exit(1)
+        tokenizer = BPETokenizer.load(tokenizer_dir)
+        print(f"  Tokenizer: vocab_size={tokenizer.vocab_size}", flush=True)
 
-    print(f"  Loading training data...", flush=True)
-    train_data_raw = torch.load(train_path, map_location="cpu", weights_only=False)
-    train_dataset = TensorDataset(train_data_raw["input_ids"])
-    seq_len = train_data_raw["seq_len"]
-    print(f"  Train: {len(train_dataset):,} sequences × {seq_len} tokens", flush=True)
+        train_path = os.path.join(data_dir, "train.pt")
+        val_path = os.path.join(data_dir, "val.pt")
+        if not os.path.exists(train_path):
+            print("  ERROR: Training data not found! Run prepare_lm_data.py first.", flush=True)
+            sys.exit(1)
 
-    val_dataset = None
-    if os.path.exists(val_path):
-        val_data_raw = torch.load(val_path, map_location="cpu", weights_only=False)
-        val_dataset = TensorDataset(val_data_raw["input_ids"])
-        print(f"  Val:   {len(val_dataset):,} sequences × {val_data_raw['seq_len']} tokens", flush=True)
+        print(f"  Loading training data...", flush=True)
+        train_data_raw = torch.load(train_path, map_location="cpu", weights_only=False)
+        train_dataset = TensorDataset(train_data_raw["input_ids"])
+        seq_len = train_data_raw["seq_len"]
+        print(f"  Train: {len(train_dataset):,} sequences × {seq_len} tokens", flush=True)
+
+        val_dataset = None
+        if os.path.exists(val_path):
+            val_data_raw = torch.load(val_path, map_location="cpu", weights_only=False)
+            val_dataset = TensorDataset(val_data_raw["input_ids"])
+            print(f"  Val:   {len(val_dataset):,} sequences × {val_data_raw['seq_len']} tokens", flush=True)
 
     # Config
     config_map = {"tiny": NexusLMConfig.tiny, "small": NexusLMConfig.small,
@@ -318,6 +345,8 @@ def main():
 
     # Run name -> isolates checkpoints/final model per variant (no clobbering!)
     run_name = args.config
+    if web_mode:
+        run_name += "_web"
     if args.detach_state:
         run_name += "_detach"
     if args.n_iter is not None:

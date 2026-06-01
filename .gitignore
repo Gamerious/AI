@@ -10,6 +10,8 @@ build/
 *.ckpt
 data/
 lm_data/
+lm_data_web/
+*.bin
 lm_checkpoints/
 checkpoints/
 wandb/

@@ -41,5 +41,11 @@ echo
 echo "  # 0-Kosten-Ablation auf einem fertigen Checkpoint:"
 echo "  python ablation_temporal.py nexus_lm_small_v2.pt"
 echo
+echo "  ----- SCALE-UP (Webdaten, FineWeb-Edu) -----"
+echo "  pip install -r requirements-web.txt          # datasets + fast tokenizer"
+echo "  python prepare_fineweb.py --tokens 300M       # erst klein (Pipeline-Test, ~Minuten)"
+echo "  python prepare_fineweb.py --tokens 2B         # echter Stage-1-Lauf"
+echo "  python train_nexus_lm.py --config base --data-dir lm_data_web --cisa-v2 --bs 32"
+echo
 echo "  WICHTIG: Pod stoppen, wenn fertig - sonst tickt die Miete weiter!"
 echo "============================================================"

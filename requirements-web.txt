@@ -1,0 +1,9 @@
+# Extra dependencies for the WEB-SCALE data pipeline (prepare_fineweb.py).
+# NOT needed for the TinyStories path (that stays zero-dep).
+#
+# On RunPod: torch already comes from the PyTorch template - do NOT reinstall it.
+#   pip install -r requirements-web.txt
+#
+datasets>=2.18      # streaming FineWeb-Edu (no full download)
+tokenizers>=0.15    # fast Rust BPE - tokenizes GB/s instead of MB/s
+numpy
