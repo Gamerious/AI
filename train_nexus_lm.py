@@ -225,7 +225,7 @@ def generate_sample(model, tokenizer, device, prompt="Once upon a time"):
 
 def main():
     parser = argparse.ArgumentParser(description="Train NEXUS Language Model")
-    parser.add_argument("--config", choices=["tiny", "small", "base", "large"], default="base")
+    parser.add_argument("--config", choices=["tiny", "small", "base", "large", "xl"], default="base")
     parser.add_argument("--data-dir", type=str, default=None,
                         help="Data directory. Default 'lm_data' (TinyStories .pt). "
                              "Point at a web dir (e.g. lm_data_web) with train.bin/val.bin "
@@ -342,7 +342,8 @@ def main():
 
     # Config
     config_map = {"tiny": NexusLMConfig.tiny, "small": NexusLMConfig.small,
-                  "base": NexusLMConfig.base, "large": NexusLMConfig.large}
+                  "base": NexusLMConfig.base, "large": NexusLMConfig.large,
+                  "xl": NexusLMConfig.xl}
     config = config_map[args.config]()
     config.vocab_size = tokenizer.vocab_size
     config.max_seq_len = seq_len
@@ -359,11 +360,11 @@ def main():
     config.deep_supervision = args.deep_supervision
 
     # Default batch sizes (tuned for 4060 8GB with AMP; tiny for CPU)
-    default_bs = {"tiny": 8, "small": 16, "base": 8, "large": 4}
+    default_bs = {"tiny": 8, "small": 16, "base": 8, "large": 4, "xl": 24}
     batch_size = args.bs or default_bs[args.config]
 
     # Default steps
-    default_steps = {"tiny": 5000, "small": 30000, "base": 50000, "large": 80000}
+    default_steps = {"tiny": 5000, "small": 30000, "base": 50000, "large": 80000, "xl": 100000}
     max_steps = args.max_steps or default_steps[args.config]
 
     # Run name -> isolates checkpoints/final model per variant (no clobbering!)

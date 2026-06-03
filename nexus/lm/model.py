@@ -340,6 +340,12 @@ class NexusLMConfig:
         """~80M real / ~320M eff. Tight fit on 4060 with small batch."""
         return cls(d_model=1024, n_heads=16, d_ff=2816, n_iterations=4, max_seq_len=512)
 
+    @classmethod
+    def xl(cls):
+        """Big chatbot base: wide single-cell CISA, ctx 1024. ~135M real / ~540M eff.
+        For cloud GPUs (B200/H100). Wide-not-deep keeps the proven architecture."""
+        return cls(d_model=2048, n_heads=32, d_ff=5632, n_iterations=4, max_seq_len=1024)
+
 
 # ============================================================
 # NEXUS-LM Model
