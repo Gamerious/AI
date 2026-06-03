@@ -51,16 +51,23 @@ def train(
     model, train_data, val_data, max_steps, lr=3e-4, warmup=1000,
     batch_size=16, grad_accum=1, log_every=100, eval_every=1000,
     device="cuda", use_amp=True, checkpoint_dir="lm_checkpoints",
-    tokenizer=None, resume_ckpt=None,
+    tokenizer=None, resume_ckpt=None, raw_model=None, amp_dtype=None,
 ):
-    """Train the language model."""
+    """Train the language model. raw_model = uncompiled module (used for
+    generation + checkpoint saving so keys/shapes stay clean under torch.compile);
+    amp_dtype = torch.bfloat16 / torch.float16 (None -> fp16)."""
     os.makedirs(checkpoint_dir, exist_ok=True)
+    if raw_model is None:
+        raw_model = model
+    if amp_dtype is None:
+        amp_dtype = torch.float16
 
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=lr, weight_decay=0.1, betas=(0.9, 0.95)
     )
 
-    use_scaler = use_amp and device == "cuda"
+    # Only fp16 needs gradient loss-scaling; bf16 does not.
+    use_scaler = use_amp and device == "cuda" and amp_dtype == torch.float16
     scaler = torch.amp.GradScaler("cuda") if use_scaler else None
 
     train_loader = DataLoader(
@@ -105,14 +112,16 @@ def train(
             else:
                 labels = input_ids.clone()  # LM: labels = input (model shifts internally)
 
-            if use_scaler:
-                with torch.amp.autocast("cuda"):
+            if use_amp and device == "cuda":
+                with torch.amp.autocast("cuda", dtype=amp_dtype):
                     outputs = model(input_ids=input_ids, labels=labels)
                     loss = outputs["loss"] / grad_accum
-                scaler.scale(loss).backward()
             else:
                 outputs = model(input_ids=input_ids, labels=labels)
                 loss = outputs["loss"] / grad_accum
+            if scaler is not None:
+                scaler.scale(loss).backward()
+            else:
                 loss.backward()
 
             if (step + 1) % grad_accum == 0 or step == max_steps - 1:
@@ -149,35 +158,35 @@ def train(
 
             # Evaluation
             if step % eval_every == 0 and step > 0:
-                val_loss = evaluate(model, val_loader, device, use_amp)
+                val_loss = evaluate(model, val_loader, device, use_amp, amp_dtype)
                 val_ppl = math.exp(min(val_loss, 20))
                 print(f"  [EVAL] Val Loss: {val_loss:.4f} | Val PPL: {val_ppl:.1f}", flush=True)
 
-                # Generate sample
+                # Generate sample (use the uncompiled module to avoid recompiles)
                 if tokenizer:
-                    generate_sample(model, tokenizer, device)
+                    generate_sample(raw_model, tokenizer, device)
 
                 # Save best model
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     torch.save({
-                        "model_state_dict": model.state_dict(),
-                        "config": model.config.to_dict(),
+                        "model_state_dict": raw_model.state_dict(),
+                        "config": raw_model.config.to_dict(),
                         "step": step,
                         "val_loss": val_loss,
                     }, os.path.join(checkpoint_dir, "best.pt"))
                     print(f"  [BEST] Saved (val_loss={val_loss:.4f})", flush=True)
 
-                model.train()
+                raw_model.train()
 
-            # Checkpoint every 5000 steps
-            if step > 0 and step % 5000 == 0:
+            # Rolling resume checkpoint every 2000 steps (single file -> bounded disk)
+            if step > 0 and step % 2000 == 0:
                 torch.save({
-                    "model_state_dict": model.state_dict(),
+                    "model_state_dict": raw_model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "config": model.config.to_dict(),
+                    "config": raw_model.config.to_dict(),
                     "step": step,
-                }, os.path.join(checkpoint_dir, f"step_{step}.pt"))
+                }, os.path.join(checkpoint_dir, "last.pt"))
 
             step += 1
 
@@ -185,7 +194,7 @@ def train(
 
 
 @torch.no_grad()
-def evaluate(model, val_loader, device, use_amp):
+def evaluate(model, val_loader, device, use_amp, amp_dtype=torch.float16):
     """Evaluate on validation set."""
     if val_loader is None:
         return 0.0
@@ -196,7 +205,7 @@ def evaluate(model, val_loader, device, use_amp):
         input_ids = batch[0].to(device)
         labels = batch[1].to(device) if len(batch) > 1 else input_ids.clone()
         if use_amp and device == "cuda":
-            with torch.amp.autocast("cuda"):
+            with torch.amp.autocast("cuda", dtype=amp_dtype):
                 outputs = model(input_ids=input_ids, labels=labels)
         else:
             outputs = model(input_ids=input_ids, labels=labels)
@@ -237,6 +246,10 @@ def main():
     parser.add_argument("--resume", type=str, default=None)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--compile", action="store_true",
+                        help="torch.compile the model (~2x on cloud GPUs). Saves/generates use the raw module.")
+    parser.add_argument("--bf16", action="store_true",
+                        help="Use bfloat16 autocast (no grad-scaler). Recommended on B200/H100.")
     parser.add_argument("--detach-state", action="store_true",
                         help="Reproduce the original buggy CISA (GRU frozen, no grad into state)")
     parser.add_argument("--n-iter", type=int, default=None,
@@ -406,6 +419,13 @@ def main():
         resume_ckpt = torch.load(args.resume, map_location=device, weights_only=False)
         model.load_state_dict(resume_ckpt["model_state_dict"])
 
+    # torch.compile for speed; keep raw_model (uncompiled) for save/generate.
+    raw_model = model
+    amp_dtype = torch.bfloat16 if args.bf16 else torch.float16
+    if args.compile and device == "cuda":
+        model = torch.compile(model)
+        print(f"  torch.compile: ON (amp={'bf16' if args.bf16 else 'fp16'})", flush=True)
+
     print(f"\n{'='*70}")
     print(f"  NEXUS-LM {args.config.upper()} Training")
     print(f"{'='*70}")
@@ -428,7 +448,7 @@ def main():
 
     # Initial sample
     print(f"\n  Initial generation (random weights):", flush=True)
-    generate_sample(model, tokenizer, device)
+    generate_sample(raw_model, tokenizer, device)
 
     # Train
     print(f"\n  Starting training...", flush=True)
@@ -439,12 +459,13 @@ def main():
         log_every=100, eval_every=2000,
         device=device, use_amp=use_amp, checkpoint_dir=checkpoint_dir,
         tokenizer=tokenizer, resume_ckpt=resume_ckpt,
+        raw_model=raw_model, amp_dtype=amp_dtype,
     )
 
     # Save final model
     final_path = f"nexus_lm_{run_name}.pt"
     torch.save({
-        "model_state_dict": model.state_dict(),
+        "model_state_dict": raw_model.state_dict(),
         "config": config.to_dict(),
         "best_val_loss": best_val_loss,
         "params": params,
@@ -463,7 +484,7 @@ def main():
     ]
     for prompt in prompts:
         print(f"\n  Prompt: \"{prompt}\"", flush=True)
-        generate_sample(model, tokenizer, device, prompt)
+        generate_sample(raw_model, tokenizer, device, prompt)
 
     print(f"\n{'='*70}")
     print(f"  NEXUS-LM {args.config.upper()} Training Complete!")
