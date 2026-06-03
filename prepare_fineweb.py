@@ -86,6 +86,9 @@ def main():
     ap.add_argument("--chars-per-token", type=float, default=4.5,
                     help="Estimate used to size the streaming buffer")
     ap.add_argument("--out", default=OUT_DIR)
+    ap.add_argument("--tokenizer", default=None,
+                    help="Reuse an existing tokenizer dir instead of training a new one "
+                         "(needed to RESUME training on a fresh pod - data must match the checkpoint's vocab)")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -122,14 +125,20 @@ def main():
         print("  ERROR: no documents streamed - check --sample / network.", flush=True)
         sys.exit(1)
 
-    # ---- Train tokenizer on a subset --------------------------------------
-    n_tok_train = min(args.tok_train_docs, len(docs))
-    print(f"\n==> Training fast BPE (vocab={args.vocab_size}) on {n_tok_train:,} docs...", flush=True)
-    t1 = time.time()
-    tok = FastTokenizer.train(iter(docs[:n_tok_train]), vocab_size=args.vocab_size, length=n_tok_train)
-    tok.save(tok_dir)
+    # ---- Tokenizer: reuse (resume) or train fresh -------------------------
+    if args.tokenizer and FastTokenizer.exists(args.tokenizer):
+        print(f"\n==> Reusing existing tokenizer from {args.tokenizer} (resume-safe)...", flush=True)
+        tok = FastTokenizer.load(args.tokenizer)
+        tok.save(tok_dir)
+        print(f"  vocab_size={tok.vocab_size}", flush=True)
+    else:
+        n_tok_train = min(args.tok_train_docs, len(docs))
+        print(f"\n==> Training fast BPE (vocab={args.vocab_size}) on {n_tok_train:,} docs...", flush=True)
+        t1 = time.time()
+        tok = FastTokenizer.train(iter(docs[:n_tok_train]), vocab_size=args.vocab_size, length=n_tok_train)
+        tok.save(tok_dir)
+        print(f"  done in {time.time()-t1:.0f}s, vocab_size={tok.vocab_size}", flush=True)
     assert tok.vocab_size <= 65535, f"vocab {tok.vocab_size} too large for uint16"
-    print(f"  done in {time.time()-t1:.0f}s, vocab_size={tok.vocab_size}", flush=True)
 
     # ---- Encode everything (batched, multi-core) --------------------------
     print(f"\n==> Encoding {len(docs):,} docs -> uint16...", flush=True)
