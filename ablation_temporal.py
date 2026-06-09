@@ -18,7 +18,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # --- load model ---
 ckpt = torch.load(CKPT, map_location=device, weights_only=False)
-cfg = NexusLMConfig(**ckpt["config"])
+cfg = NexusLMConfig.from_dict(ckpt["config"])
 model = NexusLM(cfg).to(device)
 model.load_state_dict(ckpt["model_state_dict"])
 model.eval()

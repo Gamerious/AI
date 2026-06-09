@@ -8,7 +8,7 @@ Standard causal attention at iteration t for position i:
 
 CISA at iteration t for position i:
     Attend to positions 0..i at iteration t  (spatial context)
-    + attend to own states at iterations 0..t-1  (temporal context)
+    + attend to own states at iterations 0..t  (temporal context)
 
 The "temporal" part gives each position a HISTORY of its own processing.
 This enables:
@@ -107,10 +107,14 @@ class CrossIterationStateAttention(nn.Module):
         )
         spatial_scores.masked_fill_(causal_mask.unsqueeze(0).unsqueeze(0), float('-inf'))
 
-        # === Temporal attention (to own past states) ===
-        if len(state_history) > 0 and iteration > 0:
-            # Stack past states: (B, T, N, D) where T = number of past iterations
-            past_states = torch.stack(state_history[:iteration], dim=1)  # (B, T, N, D)
+        # === Temporal attention (to own states, INCLUDING the current one) ===
+        # The current state s_t is the GRU output summarizing everything so
+        # far - hiding it from attention (old [:iteration] slice) gave the
+        # freshest state a full iteration of latency and left this path dead
+        # at iteration 0.
+        if len(state_history) > 0:
+            # Stack states: (B, T, N, D) where T = number of stored states
+            past_states = torch.stack(state_history, dim=1)  # (B, T, N, D)
             T = past_states.shape[1]
 
             # Project past states to K, V
@@ -152,7 +156,7 @@ class CrossIterationStateAttention(nn.Module):
 
             out = spatial_out + temporal_out
         else:
-            # First iteration: no temporal context, just spatial
+            # No states stored yet: just spatial
             spatial_weights = self.attn_dropout(F.softmax(spatial_scores, dim=-1))
             out = torch.matmul(spatial_weights, v)  # (B, H, N, dh)
 

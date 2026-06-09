@@ -139,8 +139,11 @@ class NexusModel(nn.Module):
         state_history: List[torch.Tensor] = []
 
         for iteration in range(self.config.n_iterations):
-            # Store current state in history (for future iterations to attend to)
-            state_history.append(state.detach().clone())
+            # Store current state in history. NOT detached: the temporal
+            # attention must backprop into the GRU state update, otherwise
+            # the GRU gets zero gradient and stays frozen at init (the
+            # original CISA bug, same fix as in the LM version).
+            state_history.append(state)
 
             # One iteration of the shared cell
             x, state = self.cell(x, state, state_history, iteration)

@@ -18,6 +18,10 @@ out["loss"].backward()
 print(f"Loss: {out['loss'].item():.4f}\n")
 print(f"{'Parameter':<45} {'grad-norm':>14}")
 print("-" * 62)
+# ReZero by design: with stabilize=True, iter_embeddings sit behind
+# tanh(iter_scale)=0 at init -> zero grad on step 1 is EXPECTED (iter_scale
+# itself gets gradient and opens the path).
+EXPECTED_ZERO_AT_INIT = {"cell.iter_embeddings.weight"} if cfg.stabilize else set()
 dead = []
 for name, p in model.named_parameters():
     if p.grad is None:
@@ -26,9 +30,13 @@ for name, p in model.named_parameters():
         dead.append(name)
     else:
         g = p.grad.norm().item()
-        flag = "  <-- NULL-GRAD" if g == 0.0 else ""
-        if g == 0.0:
+        if g == 0.0 and name in EXPECTED_ZERO_AT_INIT:
+            flag = "  (ReZero: bei Init erwartet)"
+        elif g == 0.0:
+            flag = "  <-- NULL-GRAD"
             dead.append(name)
+        else:
+            flag = ""
     gs = "None" if g is None else f"{g:.3e}"
     print(f"{name:<45} {gs:>14}{flag}")
 

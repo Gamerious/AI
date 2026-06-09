@@ -193,7 +193,9 @@ def evaluate(model, val_loader, device, use_amp):
                 outputs = model(input_ids=input_ids, labels=labels)
         else:
             outputs = model(input_ids=input_ids, labels=labels)
-        total_loss += outputs["loss"].item()
+        # Pure LM loss for PPL (with adaptive halting, "loss" includes the
+        # ponder cost and would inflate the perplexity).
+        total_loss += outputs.get("lm_loss", outputs["loss"]).item()
         n += 1
         if n >= 50:  # Quick eval
             break
@@ -232,24 +234,37 @@ def main():
                         help="Override n_iterations (for ablations, e.g. 1)")
     parser.add_argument("--gate-init", type=float, default=None,
                         help="Override temporal_gate init logit (-2.0=12%%, -1.0=27%%, 0.0=50%%)")
-    # NEXUS-2 fixes (orthogonal, individually A/B-able)
+    # NEXUS-2 fixes. A1-A4 are now the DEFAULTS (in NexusLMConfig); the
+    # --no-* forms turn them off for ablations.
     parser.add_argument("--gate-mode", choices=["logbias", "channel"], default=None,
-                        help="A1: spatial/temporal mixing (channel = separate softmax + channel gate)")
-    parser.add_argument("--nope-temporal", action="store_true", help="A2: NoPE query for temporal path")
-    parser.add_argument("--qk-norm", action="store_true", help="A3: QK-Norm on q/k")
-    parser.add_argument("--stabilize", action="store_true", help="A4: no-tanh state_init + GRU-input RMSNorm + ReZero iter_emb")
-    parser.add_argument("--deep-supervision", action="store_true", help="LM loss after every iteration")
+                        help="A1: spatial/temporal mixing (default: channel)")
+    parser.add_argument("--nope-temporal", action=argparse.BooleanOptionalAction, default=None,
+                        help="A2: NoPE query for temporal path (default: on)")
+    parser.add_argument("--qk-norm", action=argparse.BooleanOptionalAction, default=None,
+                        help="A3: QK-Norm on q/k (default: on)")
+    parser.add_argument("--stabilize", action=argparse.BooleanOptionalAction, default=None,
+                        help="A4: no-tanh state_init + GRU-input RMSNorm + ReZero iter_emb (default: on)")
+    parser.add_argument("--deep-supervision", action=argparse.BooleanOptionalAction, default=None,
+                        help="LM loss after every iteration (default: off)")
     parser.add_argument("--cisa-v2", action="store_true",
-                        help="Shortcut: enable A1(channel)+A2+A3+A4+deep-supervision together")
+                        help="Legacy shortcut: A1-A4 (now defaults) + deep supervision")
+    # NEXUS-3
+    parser.add_argument("--current-state", action=argparse.BooleanOptionalAction, default=None,
+                        help="B1: temporal path sees the CURRENT state s_t (default: on)")
+    parser.add_argument("--cross-state", action=argparse.BooleanOptionalAction, default=None,
+                        help="S1: cross-position state attention (default: off)")
+    parser.add_argument("--halting", action=argparse.BooleanOptionalAction, default=None,
+                        help="S2: ACT adaptive per-token iteration depth (default: off)")
+    parser.add_argument("--ponder-weight", type=float, default=None,
+                        help="Weight of the ACT ponder cost in the loss (default 0.01)")
+    parser.add_argument("--sdpa", action=argparse.BooleanOptionalAction, default=None,
+                        help="Flash attention via F.scaled_dot_product_attention (default: on)")
+    parser.add_argument("--grad-checkpoint", action="store_true",
+                        help="Recompute iterations in backward (fits K=8 / large on 8GB)")
     args = parser.parse_args()
 
-    # --cisa-v2 shortcut: turn on the whole NEXUS-2 Stage-1 bundle
-    if args.cisa_v2:
-        if args.gate_mode is None:
-            args.gate_mode = "channel"
-        args.nope_temporal = True
-        args.qk_norm = True
-        args.stabilize = True
+    # --cisa-v2 shortcut (legacy): A1-A4 are defaults now, just adds deep supervision
+    if args.cisa_v2 and args.deep_supervision is None:
         args.deep_supervision = True
 
     # Device
@@ -301,12 +316,19 @@ def main():
         config.n_iterations = args.n_iter
     if args.gate_init is not None:
         config.temporal_gate_init = args.gate_init
-    if args.gate_mode is not None:
-        config.gate_mode = args.gate_mode
-    config.nope_temporal = args.nope_temporal
-    config.qk_norm = args.qk_norm
-    config.stabilize = args.stabilize
-    config.deep_supervision = args.deep_supervision
+    # Only override config defaults when a flag was given explicitly
+    for arg_name, cfg_name in [
+        ("gate_mode", "gate_mode"), ("nope_temporal", "nope_temporal"),
+        ("qk_norm", "qk_norm"), ("stabilize", "stabilize"),
+        ("deep_supervision", "deep_supervision"),
+        ("current_state", "include_current_state"),
+        ("cross_state", "cross_state"), ("halting", "adaptive_halting"),
+        ("ponder_weight", "ponder_weight"), ("sdpa", "use_sdpa"),
+    ]:
+        val = getattr(args, arg_name)
+        if val is not None:
+            setattr(config, cfg_name, val)
+    config.grad_checkpoint = args.grad_checkpoint
 
     # Default batch sizes (tuned for 4060 8GB with AMP; tiny for CPU)
     default_bs = {"tiny": 8, "small": 16, "base": 8, "large": 4}
@@ -317,28 +339,32 @@ def main():
     max_steps = args.max_steps or default_steps[args.config]
 
     # Run name -> isolates checkpoints/final model per variant (no clobbering!)
+    # Suffixes mark DEVIATIONS from the current defaults (A1-A4 + B1 on).
     run_name = args.config
-    if args.detach_state:
+    if config.detach_state_history:
         run_name += "_detach"
     if args.n_iter is not None:
         run_name += f"_iter{args.n_iter}"
     if args.gate_init is not None:
         run_name += f"_gate{args.gate_init}"
-    if args.cisa_v2:
-        run_name += "_v2"
-    else:
-        if args.gate_mode == "channel":
-            run_name += "_chan"
-        if args.nope_temporal:
-            run_name += "_nope"
-        if args.qk_norm:
-            run_name += "_qknorm"
-        if args.stabilize:
-            run_name += "_stab"
-        if args.deep_supervision:
-            run_name += "_ds"
+    if config.gate_mode != "channel":
+        run_name += "_logbias"
+    if not config.nope_temporal:
+        run_name += "_ropet"
+    if not config.qk_norm:
+        run_name += "_noqknorm"
+    if not config.stabilize:
+        run_name += "_nostab"
+    if not config.include_current_state:
+        run_name += "_nocur"
+    if config.deep_supervision:
+        run_name += "_ds"
+    if config.cross_state:
+        run_name += "_xstate"
+    if config.adaptive_halting:
+        run_name += "_act"
     if run_name == args.config:
-        run_name += "_fixed"  # the corrected-CISA run
+        run_name += "_v3"  # the NEXUS-3 default bundle
     checkpoint_dir = f"lm_checkpoints_{run_name}"
 
     # Create model
@@ -361,6 +387,8 @@ def main():
     print(f"  CISA state:  {'DETACHED (buggy/frozen GRU)' if config.detach_state_history else 'LEARNED (fixed - GRU trains)'}")
     print(f"  NEXUS-2:     gate={config.gate_mode} nope={config.nope_temporal} qk_norm={config.qk_norm} "
           f"stabilize={config.stabilize} deep_sup={config.deep_supervision}")
+    print(f"  NEXUS-3:     current_state={config.include_current_state} cross_state={config.cross_state} "
+          f"halting={config.adaptive_halting} sdpa={config.use_sdpa} grad_ckpt={config.grad_checkpoint}")
     print(f"  run name:    {run_name}  ->  checkpoints in {checkpoint_dir}/")
     print(f"  max_seq_len: {config.max_seq_len}")
     print(f"  vocab_size:  {config.vocab_size}")
