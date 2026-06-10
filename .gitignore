@@ -19,3 +19,6 @@ venv/
 nexus_training.log
 s3_matrix_log.txt
 s3_matrix_results.json
+s3_matrix_*.json
+s3_matrix_*.txt
+s3_matrix_models/

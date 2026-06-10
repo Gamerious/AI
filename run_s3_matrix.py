@@ -16,6 +16,9 @@ only; the deciding run is base config on the 4060.
 Usage:
     python run_s3_matrix.py                          # tiny, CPU-friendly
     python run_s3_matrix.py --config base --bs 8 --steps 20000   # 4060
+    # gate hypothesis (CPU pilot: gates barely opened -> synergy couldn't show):
+    python run_s3_matrix.py --config base --bs 8 --steps 20000 \
+        --variants xstate,plan_xstate --gate-init -1.0
 """
 import sys, os, json, math, time, argparse
 
@@ -74,6 +77,11 @@ def run_variant(name, overrides, args, train_ids, val_loader, device, vocab_size
         setattr(cfg, k, v)
     if args.plan_horizon is not None and cfg.plan_states:
         cfg.plan_horizon = args.plan_horizon
+    if args.gate_init is not None:
+        # Seeds BOTH gates (temporal + xstate). The CPU pilot showed gates
+        # barely opening within the step budget (0.119 -> ~0.128) - this
+        # tests whether the routing path needs a more open start.
+        cfg.temporal_gate_init = args.gate_init
 
     model = NexusLM(cfg).to(device)
     n_params = sum(p.numel() for p in model.parameters())
@@ -127,9 +135,16 @@ def run_variant(name, overrides, args, train_ids, val_loader, device, vocab_size
                 print(msg, flush=True)
 
     final = history[-1]
+    ckpt_path = None
+    if args.save_dir:
+        os.makedirs(args.save_dir, exist_ok=True)
+        ckpt_path = os.path.join(args.save_dir, f"{args.config}_{name}.pt")
+        torch.save({"model_state_dict": model.state_dict(), "config": cfg.to_dict(),
+                    "step": args.steps, "val_loss": final["val_lm"]}, ckpt_path)
+        print(f"  saved -> {ckpt_path}", flush=True)
     return {"name": name, "params": n_params, "history": history,
             "final_val_lm": final["val_lm"], "final_ppl": math.exp(min(final["val_lm"], 20)),
-            "final_plan": final["val_plan"], "gates": gates(model)}
+            "final_plan": final["val_plan"], "gates": gates(model), "checkpoint": ckpt_path}
 
 
 def main():
@@ -141,13 +156,23 @@ def main():
     p.add_argument("--warmup", type=int, default=200)
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--plan-horizon", type=int, default=None)
+    p.add_argument("--gate-init", type=float, default=None,
+                   help="override gate init logit for temporal AND xstate gates "
+                        "(default -2.0 = 12%%; -1.0 = 27%% opens the state paths faster)")
     p.add_argument("--eval-every", type=int, default=500)
     p.add_argument("--eval-batches", type=int, default=30)
     p.add_argument("--final-eval-batches", type=int, default=120)
     p.add_argument("--variants", type=str, default=",".join(VARIANTS),
                    help="comma-separated subset of: " + ",".join(VARIANTS))
-    p.add_argument("--out", type=str, default="s3_matrix_results.json")
+    p.add_argument("--save-dir", type=str, default="s3_matrix_models",
+                   help="save the final model per variant here ('' disables; "
+                        "checkpoints are chat_nexus.py-compatible)")
+    p.add_argument("--out", type=str, default=None,
+                   help="results JSON (default: auto-named from config/steps/gate)")
     args = p.parse_args()
+    if args.out is None:
+        gate = f"_gate{args.gate_init}" if args.gate_init is not None else ""
+        args.out = f"s3_matrix_{args.config}_{args.steps}{gate}.json"
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     train_raw = torch.load(os.path.join(DATA_DIR, "train.pt"), map_location="cpu", weights_only=False)
@@ -158,7 +183,9 @@ def main():
     val_loader = DataLoader(TensorDataset(val_raw["input_ids"]), batch_size=args.bs,
                             shuffle=False, drop_last=True)
     print(f"device={device} config={args.config} steps={args.steps} bs={args.bs} "
-          f"vocab={vocab_size} seq={seq_len} seed={args.seed}", flush=True)
+          f"vocab={vocab_size} seq={seq_len} seed={args.seed} "
+          f"gate_init={args.gate_init if args.gate_init is not None else 'default(-2.0)'}",
+          flush=True)
 
     results = []
     for name in args.variants.split(","):

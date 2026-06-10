@@ -48,7 +48,9 @@ nexus/                  # NEW architecture (task-solver version)
     tokenizer.py        # BPE tokenizer (zero deps, GPT-2 style)
     model.py            # NexusLM + NexusLMConfig (with RoPE)
 
-train_nexus_lm.py       # MAIN training script (this is what you run)
+train_nexus_lm.py       # MAIN training script (single runs, checkpoints/resume)
+run_s3_matrix.py        # S3 2x2 ablation driver (base/plan/xstate/plan_xstate)
+test_nexus3.py          # 56-check architecture battery (run after ANY model change)
 prepare_lm_data.py      # Downloads TinyStories, trains tokenizer
 chat_nexus.py           # Interactive chat with trained model
 eval_nexus.py           # Quick eval of a saved model
@@ -77,11 +79,50 @@ Older result (pre-NEXUS-3, CPU sandbox, tiny config): val PPL 20.3 after 3500
 steps on TinyStories — undertrained, not broken (TinyStories-1M paper reaches
 PPL ~3-4). Old checkpoints load via `from_dict` with their old behavior.
 
-**Next step (user's plan):** Train on the 4060. Priority order:
-1. `base` baseline with the new defaults (`_v3` run)
-2. The deciding ablation: same run with `--no-current-state --gate-mode logbias ...` vs v3, and `ablation_temporal.py` on the result (does the state path matter at all?)
-3. **The S3 2x2 matrix** (the potential-paper experiment): v3 baseline vs `--plan` vs `--cross-state` vs `--plan --cross-state`. Hypothesis: superadditive (plans are worth more when others read them). Watch `plan_loss` (do states learn the future?) and the learned `xstate_gate`.
-4. `--halting` on top of whatever wins
+### CPU pilot result (2026-06-10, sandbox)
+
+First S3 2x2 matrix ran on CPU (tiny config, vocab 4096, seq 128, 2000 steps,
+1 seed, `run_s3_matrix.py`). Result:
+
+| variant     | val lm | PPL   | delta vs base |
+|-------------|--------|-------|---------------|
+| base        | 3.1609 | 23.59 | -             |
+| plan        | 3.1540 | 23.43 | -0.0069       |
+| xstate      | 3.1423 | 23.16 | **-0.0186**   |
+| plan_xstate | 3.1486 | 23.30 | -0.0123       |
+
+Reading: all features beat base (near noise floor); xstate strongest single
+effect (consistent with "only path routing new information"); plan_loss fell
+8.3 (chance) -> 5.18, so **states demonstrably learn future content**; but the
+**superadditivity hypothesis was NOT confirmed** (synergy -0.013). Suspected
+cause: gates barely opened within 2000 steps (xstate_gate 0.119 -> 0.127), so
+the plan-READING channel was nearly closed. Differences at this scale are
+direction, not verdict.
+
+### NEXT: the 4060 protocol (run via run_s3_matrix.py)
+
+```bash
+# 0. once: data + sanity (battery must be 56/56)
+python prepare_lm_data.py --vocab-size 16000
+python test_nexus3.py
+
+# 1. the real matrix (overnight; ~hours per variant - check st/s in the log
+#    and scale --steps so a variant fits your time budget)
+python run_s3_matrix.py --config base --bs 8 --steps 20000
+
+# 2. gate hypothesis: does synergy appear when the routing path starts open?
+python run_s3_matrix.py --config base --bs 8 --steps 20000 \
+    --variants xstate,plan_xstate --gate-init -1.0
+
+# 3. optional: --halting on top of whatever wins; long train of the winner
+#    via train_nexus_lm.py for a chat-able model
+```
+
+Each run auto-saves results JSON (`s3_matrix_<config>_<steps>[_gate..].json`)
+and final models per variant in `s3_matrix_models/` (chat_nexus-compatible).
+What to read: final table + SYNERGY line; `plan_loss` trajectory; whether
+`xstate_gate` opens. If base-config results contradict the CPU pilot, the
+base-config numbers win (bigger model, more steps, real vocab).
 
 ---
 
