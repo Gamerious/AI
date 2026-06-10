@@ -204,9 +204,59 @@ m_new = NexusLM(NexusLMConfig.from_dict(old_dict))
 m_new.load_state_dict(m_old.state_dict())
 check("legacy[state_dict roundtrip]", True)
 
+# ----------------------------------------------------------------- S3 plans
+print("\n[8] S3 plan states (state channel predicts the future)")
+m = make(plan_states=True, plan_horizon=2)
+m.train()
+out = m(ids, labels=ids.clone())
+check("plan[loss present]", "plan_loss" in out and torch.isfinite(out["plan_loss"]))
+check("plan[loss = lm + w*plan]",
+      torch.allclose(out["loss"],
+                     out["lm_loss"] + m.config.plan_weight * out["plan_loss"], atol=1e-6))
+
+# the plan objective ALONE must reach the GRU/state path (that's the point:
+# it shapes what the state channel stores)
+m.zero_grad()
+out["plan_loss"].backward()
+g = m.cell.state_update.W_z.weight.grad
+check("plan[gradient reaches GRU]", g is not None and g.norm() > 0)
+
+# triple combo: lm + plan + ponder decompose exactly
+m = make(plan_states=True, plan_horizon=1, adaptive_halting=True)
+m.train()
+out = m(ids, labels=ids.clone())
+expected = (out["lm_loss"] + m.config.plan_weight * out["plan_loss"]
+            + m.config.ponder_weight * out["ponder_cost"])
+check("plan[loss = lm + plan + ponder]", torch.allclose(out["loss"], expected, atol=1e-6))
+
+# sequences too short for any horizon: plan term silently absent, no crash
+out = m(ids[:, :2], labels=ids[:, :2].clone())
+check("plan[short seq safe]", "loss" in out and "plan_loss" not in out)
+
+# eval averages all horizons
+m.eval()
+with torch.no_grad():
+    out = m(ids, labels=ids.clone())
+check("plan[eval finite]", torch.isfinite(out["plan_loss"]))
+
+# plan heads are train-time only: generation (cached & uncached) still agrees
+g1 = m.generate(ids[:1, :5], max_new_tokens=12, temperature=0, eos_id=-1, use_cache=True)
+g2 = m.generate(ids[:1, :5], max_new_tokens=12, temperature=0, eos_id=-1, use_cache=False)
+check("plan[greedy cache match]", torch.equal(g1, g2))
+
+# full S1+S3 stack: every parameter lives (H=1 so the single plan head is
+# deterministically sampled)
+m = make(plan_states=True, plan_horizon=1, cross_state=True)
+m.train()
+m(ids, labels=ids.clone())["loss"].backward()
+dead = [n for n, p in m.named_parameters()
+        if (p.grad is None or p.grad.norm() == 0) and n not in allowed_zero]
+check("plan[all params live (plan+xstate)]", not dead, f"dead: {dead}")
+
 # -------------------------------------------------------------- train smoke
-print("\n[8] Training smoke test (overfit one batch, full feature set)")
-m = make(cross_state=True, adaptive_halting=True, deep_supervision=True)
+print("\n[9] Training smoke test (overfit one batch, full feature set)")
+m = make(cross_state=True, adaptive_halting=True, deep_supervision=True,
+         plan_states=True, plan_horizon=2)
 m.train()
 opt = torch.optim.AdamW(m.parameters(), lr=3e-3)
 losses = []

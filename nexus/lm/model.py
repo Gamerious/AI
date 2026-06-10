@@ -19,6 +19,14 @@ NEXUS-3 additions (this file):
       information, unlike the own-history path.
 - S2  adaptive_halting: ACT-style learned per-token iteration depth
       (Universal-Transformer-style frozen blending + ponder cost).
+- S3  plan_states: the state channel is trained to predict the FUTURE
+      (tokens i+2..i+1+H), turning it into an explicit per-token plan.
+      With cross_state on, decoding routes these supervised plans across
+      positions - tokens read their predecessors' plans. Related lines
+      (MTP/DeepSeek-V3, Belief State Transformer, NextLat, Semformer) all
+      supervise futures in the residual stream or auxiliary latents that
+      are NOT attended to by other positions; the routed plan channel is
+      the novel combination here.
 - Per-state K/V projections are computed ONCE when a state is added to the
   history (was: recomputed over the whole history every iteration, O(K^2)).
 - F.scaled_dot_product_attention (flash) for all separate-softmax paths.
@@ -516,6 +524,15 @@ class NexusLMConfig:
     adaptive_halting: bool = False
     ponder_weight: float = 0.01     # weight of the ACT ponder cost in the loss
     halt_bias_init: float = -1.0    # initial halt-head bias (sigmoid(-1)=0.27)
+    # S3: plan states. The final state of position i is trained to predict
+    # tokens i+2 .. i+1+plan_horizon (i+1 is the LM loss's job). This turns
+    # the state channel into an explicit PLAN of the future instead of a
+    # recap of the past - and cross_state attention then routes plans across
+    # positions at decode time ("read your predecessors' plans").
+    # Train-time only; zero inference cost.
+    plan_states: bool = False
+    plan_horizon: int = 4           # how many tokens beyond next to predict
+    plan_weight: float = 0.1        # weight of the plan loss
     # Use F.scaled_dot_product_attention (flash) where the math allows it
     # (all separate-softmax paths). Numerically equivalent; big speed/memory win.
     use_sdpa: bool = True
@@ -616,6 +633,15 @@ class NexusLM(nn.Module):
         if config.adaptive_halting:
             self.halt_head = nn.Linear(config.d_model * 2, 1)
 
+        # S3: plan heads - one projection per future offset, output through
+        # the tied LM head (cheap). Supervises the STATE channel, not x.
+        if config.plan_states:
+            self.plan_norm = RMSNorm(config.d_model)
+            self.plan_projs = nn.ModuleList(
+                nn.Linear(config.d_model, config.d_model, bias=False)
+                for _ in range(config.plan_horizon)
+            )
+
         # Output
         self.out_norm = nn.LayerNorm(config.d_model)
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
@@ -659,6 +685,32 @@ class NexusLM(nn.Module):
             shift_labels.view(-1),
             ignore_index=-100,
         )
+
+    def _plan_loss(self, state, labels) -> Optional[torch.Tensor]:
+        """S3: the final state of position i must predict tokens i+2..i+1+H.
+
+        Training samples ONE horizon per step (unbiased estimate of the mean,
+        constant memory: a single extra (B,N,V) logits tensor). Eval averages
+        all horizons (under no_grad, so memory is freed per horizon).
+        """
+        N = labels.shape[1]
+        valid = [h for h in range(1, self.config.plan_horizon + 1) if N > 1 + h]
+        if not valid:
+            return None
+        if self.training:
+            valid = [valid[int(torch.randint(len(valid), (1,)))]]
+
+        s = self.plan_norm(state)
+        losses = []
+        for h in valid:
+            off = 1 + h
+            plan_logits = self.lm_head(self.plan_projs[h - 1](s[:, :-off]))
+            losses.append(F.cross_entropy(
+                plan_logits.reshape(-1, self.config.vocab_size),
+                labels[:, off:].reshape(-1),
+                ignore_index=-100,
+            ))
+        return torch.stack(losses).mean()
 
     def forward(self, input_ids: torch.Tensor, labels: Optional[torch.Tensor] = None,
                 kv_cache: Optional[NexusKVCache] = None, pos_offset: int = 0):
@@ -774,7 +826,15 @@ class NexusLM(nn.Module):
         if labels is not None:
             lm = (ds_loss / ds_wsum) if deep else self._lm_loss(logits, labels)
             result["lm_loss"] = lm
-            result["loss"] = lm + cfg.ponder_weight * ponder_cost if halting else lm
+            total = lm
+            if cfg.plan_states:
+                plan_loss = self._plan_loss(state, labels)
+                if plan_loss is not None:
+                    result["plan_loss"] = plan_loss
+                    total = total + cfg.plan_weight * plan_loss
+            if halting:
+                total = total + cfg.ponder_weight * ponder_cost
+            result["loss"] = total
 
         return result
 

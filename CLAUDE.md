@@ -26,6 +26,7 @@ The cell is applied K times (3-4 iterations depending on config) with shared wei
 - **B1 `include_current_state`** (default on): temporal path sees the current GRU state s_t; previously the freshest state was invisible for one iteration and the path was dead at iteration 0.
 - **S1 `cross_state`** (flag `--cross-state`): Cross-Position State Attention — positions attend causally to OTHER positions' latest states ("read the neighbors' conclusions, not their surface"). The only state path that routes genuinely new information. THE candidate for a real innovation; needs the ablation run.
 - **S2 `adaptive_halting`** (flag `--halting`): ACT-style learned per-token iteration depth (UT-style frozen blending + ponder cost, `--ponder-weight`, default 0.01). `get_diagnostics()["avg_depth"]` reports the learned depth.
+- **S3 `plan_states`** (flags `--plan`, `--plan-horizon` H=4, `--plan-weight` 0.1): the state channel is TRAINED to predict tokens i+2..i+1+H — it becomes an explicit per-token plan of the future instead of a recap. With `--cross-state`, decoding routes these supervised plans across positions ("tokens read their predecessors' plans"). Novelty: MTP/DeepSeek-V3, Belief State Transformer, NextLat, Semformer all supervise futures in the residual stream or in latents nobody attends to; the *routed* plan channel is the new combination. Train-time only, zero inference cost; training samples one random horizon per step (constant memory). **Headline hypothesis: plan × cross_state is superadditive** — a plan is worth more if others can read it.
 - **Exact KV cache** for generation (K per-iteration caches; strict causality makes it exact). 2.5x faster even on tiny/CPU, much more at N=512 on GPU.
 - **Flash attention** (`F.scaled_dot_product_attention`) on all separate-softmax paths (gate_mode=channel). GPU win; on CPU slightly slower (irrelevant).
 - **A1-A4 are now DEFAULTS** (channel gate, NoPE temporal, QK-Norm, stabilize). `--no-qk-norm` etc. for ablations. `temporal_gate_init` stays -2.0.
@@ -67,10 +68,10 @@ training/               # Task-model framework: tasks.py + evaluator.py (model-a
 ## Current State (as of last session)
 
 NEXUS-3 architecture work landed (see additions above). All changes are
-verified by `test_nexus3.py` — 48 checks: causality for every variant (incl.
+verified by `test_nexus3.py` — 56 checks: causality for every variant (incl.
 cross_state), KV-cache == full recompute, gradient flow, SDPA parity,
-grad-checkpoint parity, ACT sanity, legacy-config loading, train smoke test.
-**Run this battery after any architecture change.**
+grad-checkpoint parity, ACT sanity, plan-state loss/gradients, legacy-config
+loading, train smoke test. **Run this battery after any architecture change.**
 
 Older result (pre-NEXUS-3, CPU sandbox, tiny config): val PPL 20.3 after 3500
 steps on TinyStories — undertrained, not broken (TinyStories-1M paper reaches
@@ -79,7 +80,8 @@ PPL ~3-4). Old checkpoints load via `from_dict` with their old behavior.
 **Next step (user's plan):** Train on the 4060. Priority order:
 1. `base` baseline with the new defaults (`_v3` run)
 2. The deciding ablation: same run with `--no-current-state --gate-mode logbias ...` vs v3, and `ablation_temporal.py` on the result (does the state path matter at all?)
-3. `--cross-state` and `--halting` runs vs the v3 baseline
+3. **The S3 2x2 matrix** (the potential-paper experiment): v3 baseline vs `--plan` vs `--cross-state` vs `--plan --cross-state`. Hypothesis: superadditive (plans are worth more when others read them). Watch `plan_loss` (do states learn the future?) and the learned `xstate_gate`.
+4. `--halting` on top of whatever wins
 
 ---
 
@@ -106,7 +108,8 @@ python train_nexus_lm.py --config base --bs 8
 # The new features (each vs. the plain v3 run = the ablation):
 python train_nexus_lm.py --config base --bs 8 --cross-state          # S1
 python train_nexus_lm.py --config base --bs 8 --halting              # S2
-python train_nexus_lm.py --config base --bs 8 --cross-state --halting
+python train_nexus_lm.py --config base --bs 8 --plan                 # S3
+python train_nexus_lm.py --config base --bs 8 --cross-state --plan   # THE combo (routed plans)
 
 # Memory tight (large config or K=8):
 python train_nexus_lm.py --config large --bs 4 --grad-accum 4 --grad-checkpoint

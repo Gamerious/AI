@@ -257,6 +257,12 @@ def main():
                         help="S2: ACT adaptive per-token iteration depth (default: off)")
     parser.add_argument("--ponder-weight", type=float, default=None,
                         help="Weight of the ACT ponder cost in the loss (default 0.01)")
+    parser.add_argument("--plan", action=argparse.BooleanOptionalAction, default=None,
+                        help="S3: plan states - state channel predicts tokens i+2..i+1+H (default: off)")
+    parser.add_argument("--plan-horizon", type=int, default=None,
+                        help="S3: how many tokens beyond next the state must predict (default 4)")
+    parser.add_argument("--plan-weight", type=float, default=None,
+                        help="S3: weight of the plan loss (default 0.1)")
     parser.add_argument("--sdpa", action=argparse.BooleanOptionalAction, default=None,
                         help="Flash attention via F.scaled_dot_product_attention (default: on)")
     parser.add_argument("--grad-checkpoint", action="store_true",
@@ -324,6 +330,8 @@ def main():
         ("current_state", "include_current_state"),
         ("cross_state", "cross_state"), ("halting", "adaptive_halting"),
         ("ponder_weight", "ponder_weight"), ("sdpa", "use_sdpa"),
+        ("plan", "plan_states"), ("plan_horizon", "plan_horizon"),
+        ("plan_weight", "plan_weight"),
     ]:
         val = getattr(args, arg_name)
         if val is not None:
@@ -363,6 +371,8 @@ def main():
         run_name += "_xstate"
     if config.adaptive_halting:
         run_name += "_act"
+    if config.plan_states:
+        run_name += f"_plan{config.plan_horizon}"
     if run_name == args.config:
         run_name += "_v3"  # the NEXUS-3 default bundle
     checkpoint_dir = f"lm_checkpoints_{run_name}"
@@ -389,6 +399,9 @@ def main():
           f"stabilize={config.stabilize} deep_sup={config.deep_supervision}")
     print(f"  NEXUS-3:     current_state={config.include_current_state} cross_state={config.cross_state} "
           f"halting={config.adaptive_halting} sdpa={config.use_sdpa} grad_ckpt={config.grad_checkpoint}")
+    if config.plan_states:
+        print(f"  S3 plan:     horizon={config.plan_horizon} weight={config.plan_weight} "
+              f"(state channel predicts tokens i+2..i+{1 + config.plan_horizon})")
     print(f"  run name:    {run_name}  ->  checkpoints in {checkpoint_dir}/")
     print(f"  max_seq_len: {config.max_seq_len}")
     print(f"  vocab_size:  {config.vocab_size}")
