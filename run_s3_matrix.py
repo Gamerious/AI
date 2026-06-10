@@ -138,7 +138,7 @@ def run_variant(name, overrides, args, train_ids, val_loader, device, vocab_size
     ckpt_path = None
     if args.save_dir:
         os.makedirs(args.save_dir, exist_ok=True)
-        ckpt_path = os.path.join(args.save_dir, f"{args.config}_{name}.pt")
+        ckpt_path = os.path.join(args.save_dir, f"{args.config}_{name}_s{args.seed}.pt")
         torch.save({"model_state_dict": model.state_dict(), "config": cfg.to_dict(),
                     "step": args.steps, "val_loss": final["val_lm"]}, ckpt_path)
         print(f"  saved -> {ckpt_path}", flush=True)
@@ -168,17 +168,20 @@ def main():
                    help="save the final model per variant here ('' disables; "
                         "checkpoints are chat_nexus.py-compatible)")
     p.add_argument("--out", type=str, default=None,
-                   help="results JSON (default: auto-named from config/steps/gate)")
+                   help="results JSON (default: auto-named from config/steps/seed/gate)")
+    p.add_argument("--data-dir", type=str, default=DATA_DIR,
+                   help="data directory from prepare_lm_data.py (default lm_data)")
     args = p.parse_args()
     if args.out is None:
         gate = f"_gate{args.gate_init}" if args.gate_init is not None else ""
-        args.out = f"s3_matrix_{args.config}_{args.steps}{gate}.json"
+        args.out = f"s3_matrix_{args.config}_{args.steps}_s{args.seed}{gate}.json"
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    train_raw = torch.load(os.path.join(DATA_DIR, "train.pt"), map_location="cpu", weights_only=False)
-    val_raw = torch.load(os.path.join(DATA_DIR, "val.pt"), map_location="cpu", weights_only=False)
+    data_dir = os.path.abspath(args.data_dir)
+    train_raw = torch.load(os.path.join(data_dir, "train.pt"), map_location="cpu", weights_only=False)
+    val_raw = torch.load(os.path.join(data_dir, "val.pt"), map_location="cpu", weights_only=False)
     seq_len = train_raw["seq_len"]
-    with open(os.path.join(DATA_DIR, "tokenizer", "tokenizer.json")) as f:
+    with open(os.path.join(data_dir, "tokenizer", "tokenizer.json")) as f:
         vocab_size = json.load(f)["vocab_size"]
     val_loader = DataLoader(TensorDataset(val_raw["input_ids"]), batch_size=args.bs,
                             shuffle=False, drop_last=True)

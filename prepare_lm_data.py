@@ -179,10 +179,28 @@ def main():
     parser.add_argument("--skip-download", action="store_true", help="Skip download step")
     parser.add_argument("--custom-data", type=str, default=None, help="Use custom text file instead of TinyStories")
     parser.add_argument("--tokenizer-train-size", type=int, default=50000, help="Number of texts to train tokenizer on")
+    parser.add_argument("--data-dir", type=str, default=DATA_DIR,
+                        help="Output directory (default lm_data). Lets multiple preps "
+                             "coexist, e.g. lm_data_tiny for the saturated-tiny matrix.")
     args = parser.parse_args()
 
-    os.makedirs(DATA_DIR, exist_ok=True)
-    tokenizer_dir = os.path.join(DATA_DIR, "tokenizer")
+    data_dir = os.path.abspath(args.data_dir)
+    os.makedirs(data_dir, exist_ok=True)
+    tokenizer_dir = os.path.join(data_dir, "tokenizer")
+
+    # Reuse already-downloaded raw text from the default dir (hardlink, else
+    # copy) so a second prep doesn't re-download gigabytes.
+    if data_dir != os.path.abspath(DATA_DIR):
+        for split in ("train", "validation"):
+            src = os.path.join(DATA_DIR, f"tinystories_{split}.txt")
+            dst = os.path.join(data_dir, f"tinystories_{split}.txt")
+            if os.path.exists(src) and not os.path.exists(dst):
+                try:
+                    os.link(src, dst)
+                except OSError:
+                    import shutil
+                    shutil.copy(src, dst)
+                print(f"  Reusing downloaded {split} data from {DATA_DIR}", flush=True)
 
     print("=" * 70)
     print("  NEXUS-LM Data Preparation")
@@ -201,18 +219,18 @@ def main():
     else:
         print(f"\n  Step 1: Getting TinyStories data...", flush=True)
         if not args.skip_download:
-            success = download_tinystories(DATA_DIR)
+            success = download_tinystories(data_dir)
             if not success:
                 print("\n  Fallback: creating synthetic training data...", flush=True)
                 train_texts = create_synthetic_data()
                 val_texts = train_texts[-500:]
                 train_texts = train_texts[:-500]
             else:
-                train_texts = load_texts(DATA_DIR, "train", args.max_stories)
-                val_texts = load_texts(DATA_DIR, "validation", max_stories=5000)
+                train_texts = load_texts(data_dir, "train", args.max_stories)
+                val_texts = load_texts(data_dir, "validation", max_stories=5000)
         else:
-            train_texts = load_texts(DATA_DIR, "train", args.max_stories)
-            val_texts = load_texts(DATA_DIR, "validation", max_stories=5000)
+            train_texts = load_texts(data_dir, "train", args.max_stories)
+            val_texts = load_texts(data_dir, "validation", max_stories=5000)
 
     if not train_texts:
         print("  ERROR: No training data available!", flush=True)
@@ -247,13 +265,13 @@ def main():
 
     n_train = tokenize_and_save(
         tokenizer, train_texts,
-        os.path.join(DATA_DIR, "train.pt"),
+        os.path.join(data_dir, "train.pt"),
         seq_len=args.seq_len, split_name="train"
     )
 
     n_val = tokenize_and_save(
         tokenizer, val_texts,
-        os.path.join(DATA_DIR, "val.pt"),
+        os.path.join(data_dir, "val.pt"),
         seq_len=args.seq_len, split_name="val"
     )
 

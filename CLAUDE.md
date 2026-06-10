@@ -101,28 +101,42 @@ direction, not verdict.
 
 ### NEXT: the 4060 protocol (run via run_s3_matrix.py)
 
+The CPU pilot was ~8x under Chinchilla (4.1M tokens for 1.56M params).
+Stage A fixes exactly that, cheaply, before the expensive base run.
+
 ```bash
-# 0. once: data + sanity (battery must be 56/56)
-python prepare_lm_data.py --vocab-size 16000
+# 0. once: sanity (battery must be 56/56)
 python test_nexus3.py
 
-# 1. the real matrix (overnight; ~hours per variant - check st/s in the log
-#    and scale --steps so a variant fits your time budget)
-python run_s3_matrix.py --config base --bs 8 --steps 20000
+# --- Stage A: SATURATED tiny matrix (~Chinchilla: 33M tokens for 1.5M params)
+# tiny on the 4060 is fast -> full matrix likely 15-40 min per seed.
+# 2 seeds kill the single-seed weakness of the pilot.
+python prepare_lm_data.py --data-dir lm_data_tiny --vocab-size 4096 \
+    --seq-len 128 --max-stories 180000        # ~34M unique tokens, no repeats
+python run_s3_matrix.py --config tiny --bs 64 --steps 4000 --data-dir lm_data_tiny --seed 1234
+python run_s3_matrix.py --config tiny --bs 64 --steps 4000 --data-dir lm_data_tiny --seed 42
 
-# 2. gate hypothesis: does synergy appear when the routing path starts open?
-python run_s3_matrix.py --config base --bs 8 --steps 20000 \
+# --- Stage B: gate hypothesis at tiny (minutes): does synergy appear when
+# the plan-READING path starts open instead of throttled?
+python run_s3_matrix.py --config tiny --bs 64 --steps 4000 --data-dir lm_data_tiny \
     --variants xstate,plan_xstate --gate-init -1.0
 
-# 3. optional: --halting on top of whatever wins; long train of the winner
-#    via train_nexus_lm.py for a chat-able model
+# --- Stage C: base matrix overnight = the verdict (carry over the gate-init
+# if Stage B favored it)
+python prepare_lm_data.py --vocab-size 16000   # default lm_data, seq 512
+python run_s3_matrix.py --config base --bs 8 --steps 20000
+
+# optional afterwards: --halting on the winner; long train via
+# train_nexus_lm.py for a chat-able model
 ```
 
-Each run auto-saves results JSON (`s3_matrix_<config>_<steps>[_gate..].json`)
-and final models per variant in `s3_matrix_models/` (chat_nexus-compatible).
-What to read: final table + SYNERGY line; `plan_loss` trajectory; whether
-`xstate_gate` opens. If base-config results contradict the CPU pilot, the
-base-config numbers win (bigger model, more steps, real vocab).
+Outputs per run: auto-named JSON (`s3_matrix_<config>_<steps>_s<seed>[_gate..].json`)
++ final models in `s3_matrix_models/` (chat_nexus-compatible, per-seed names).
+What to read: SYNERGY line; `plan_loss` trajectory; whether `xstate_gate`
+opens. Check st/s in the log and scale --steps to your time budget - a
+finished smaller run beats an aborted big one. If stages disagree, the
+bigger run wins. Raw TinyStories downloads are reused across data dirs
+(hardlink) - no re-download.
 
 ---
 
