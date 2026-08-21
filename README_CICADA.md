@@ -27,6 +27,10 @@ the community's own translation file.
 | 2013 (second puzzle) | solved by the community in 2013 |
 | 2014 -> Liber Primus | **19% solved.** 2 977 of 15 933 runes.  The other 12 956 are open, and have been since 2014 |
 
+By page that is roughly 17 read against 55 open, but only roughly: a `$` segment
+boundary can fall in the middle of a page, so page-level attribution is
+approximate where segment-level and rune-level counts are exact.
+
 `solve_cicada.py verify` reproduces all nine solved sections:
 
 ```
@@ -149,13 +153,16 @@ each by a margin of 0.6 to 1.5 nats over the runner-up.  On the open segments:
 | 14 integer streams x 40 offsets x 2 directions x atbash | 2 240 | -3.74 |
 | 10 000-word keyword Vigenere | 38 496 | -3.68 |
 | the same streams under the F rule (beam decoded) | 560 | -3.63 |
-| 1 200-word keyword under the F rule | 2 492 | -3.67 |
+| 1 200-word keyword under the F rule | 2 492 | -3.63 |
 | columnar transposition, 2-60 columns | 118 | -3.77 |
 | autokey, all primers up to length 2 | 870 | -3.71 |
 
-English scores about -2.1 and uniform random about -3.85.  Nothing in roughly
-365 000 candidates cleared -3.6, which is what taking a maximum over that many
-random draws produces on its own.  The integer streams include primes,
+English scores about -2.1 and uniform random about -3.85.  The sweep tested
+**365 168** candidates in total (45 646 per segment across eight segments); the
+single best score anywhere was **-3.626**, on segment 0.7 under a prime running
+key with the F rule.  That is what taking a maximum over that many random draws
+produces on its own.  For comparison the positive controls land at -1.90 to
+-2.79.  The integer streams include primes,
 phi(prime_n), phi(n), Fibonacci, Lucas, triangular numbers, squares, prime
 gaps, prime partial sums, multiples of 3301 and the digits of pi and e.
 
@@ -201,3 +208,9 @@ tests/test_cicada.py 27 tests
 
 `cicada/data/` holds the English corpus the rune n-gram model trains on
 (Norvig's `big.txt`) and two word lists; they are downloaded, not authored here.
+It also keeps `attack_sweep.log` and `attack_sweep.json`, the full output of the
+365 168-candidate run, so the negative result can be inspected rather than taken
+on trust.
+
+A written-up version of these findings, with the charts, is in
+`docs/liber-primus.html`.

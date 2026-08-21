@@ -1,0 +1,466 @@
+<title>The Liber Primus Deficit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Runic&display=swap">
+
+<style>
+:root{
+  --paper:#E8EAE6; --surface:#F2F3F0; --raise:#FBFBF9;
+  --ink:#171C1A; --muted:#5C6663; --faint:#8A938F;
+  --rule:#CBD0CB; --rule-soft:#DDE1DC;
+  --accent:#2F6D5F; --accent-soft:#DCE7E3;
+  --signal:#A8322A; --signal-soft:#F0DEDB;
+  --display:"Spectral",Georgia,"Times New Roman",serif;
+  --body:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --runic:"Noto Sans Runic","Segoe UI Historic","Segoe UI Symbol",serif;
+  --col:66ch; --wide:1080px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#101413; --surface:#171D1B; --raise:#1E2523;
+    --ink:#E3E7E3; --muted:#96A29D; --faint:#6E7A76;
+    --rule:#2B3431; --rule-soft:#222A28;
+    --accent:#63C0A9; --accent-soft:#1B2E2A;
+    --signal:#E07A68; --signal-soft:#33201D;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101413; --surface:#171D1B; --raise:#1E2523;
+  --ink:#E3E7E3; --muted:#96A29D; --faint:#6E7A76;
+  --rule:#2B3431; --rule-soft:#222A28;
+  --accent:#63C0A9; --accent-soft:#1B2E2A;
+  --signal:#E07A68; --signal-soft:#33201D;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--body); font-size:16.5px; line-height:1.68;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--wide); margin:0 auto; padding:0 28px}
+.col{max-width:var(--col); margin-inline:auto}
+
+h1,h2,h3{font-family:var(--display); font-weight:600; text-wrap:balance; margin:0}
+h2{font-size:1.62rem; line-height:1.25; letter-spacing:-.01em}
+h3{font-size:1.08rem; line-height:1.35}
+p{margin:0}
+a{color:var(--accent); text-underline-offset:3px; text-decoration-thickness:1px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:2px}
+
+.eyebrow{
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--faint);
+}
+code,.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+code{font-size:.88em; background:var(--surface); padding:.1em .34em; border-radius:2px}
+.runes{font-family:var(--runic); font-size:1.15em; letter-spacing:.04em}
+
+/* ---------- masthead ---------- */
+header{border-bottom:1px solid var(--rule); background:var(--surface)}
+.mast{padding:64px 0 0; display:flex; flex-direction:column; gap:26px}
+.mast h1{font-size:clamp(2.3rem,5.6vw,3.6rem); line-height:1.04; letter-spacing:-.022em; max-width:20ch}
+.mast .lede{font-size:1.1rem; color:var(--muted); max-width:60ch}
+.byline{display:flex; flex-wrap:wrap; gap:10px 26px; align-items:baseline}
+
+/* the alphabet band — the 29 runes everything runs on */
+.primus{
+  margin-top:8px; border-top:1px solid var(--rule); padding:22px 0 30px;
+  overflow-x:auto; scrollbar-width:thin;
+}
+.primus-row{display:flex; gap:0; min-width:max-content}
+.gp{
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  padding:6px 10px; border-right:1px solid var(--rule-soft);
+}
+.gp:last-child{border-right:0}
+.gp .r{font-family:var(--runic); font-size:1.5rem; line-height:1.1; color:var(--ink)}
+.gp .l{font-family:var(--mono); font-size:.66rem; letter-spacing:.06em; color:var(--muted)}
+.gp .p{font-family:var(--mono); font-size:.66rem; color:var(--accent); font-variant-numeric:tabular-nums}
+
+/* ---------- sections ---------- */
+main{padding:0 0 96px}
+section{padding:56px 0; border-bottom:1px solid var(--rule-soft)}
+section:last-child{border-bottom:0}
+.sec-head{display:flex; flex-direction:column; gap:10px; margin-bottom:26px}
+.stack{display:flex; flex-direction:column; gap:20px}
+
+/* ---------- verdict strip ---------- */
+.verdict{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1px; background:var(--rule); border:1px solid var(--rule)}
+.v{background:var(--raise); padding:20px 22px; display:flex; flex-direction:column; gap:6px}
+.v .k{font-family:var(--mono); font-size:.68rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint)}
+.v .n{font-family:var(--display); font-size:2rem; line-height:1; font-variant-numeric:tabular-nums}
+.v .s{font-size:.86rem; color:var(--muted); line-height:1.45}
+.v.hot .n{color:var(--signal)}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto; border:1px solid var(--rule); background:var(--raise)}
+table{border-collapse:collapse; width:100%; min-width:520px; font-size:.87rem}
+th,td{padding:9px 14px; text-align:left; border-bottom:1px solid var(--rule-soft)}
+thead th{
+  font-family:var(--mono); font-size:.66rem; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--faint); font-weight:500; background:var(--surface); border-bottom:1px solid var(--rule);
+  white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+tr.match td{background:var(--signal-soft)}
+tr.match td:first-child{font-weight:600}
+.ok{color:var(--accent); font-family:var(--mono); font-size:.78rem}
+.hot{color:var(--signal); font-weight:600}
+caption{caption-side:bottom; padding:11px 14px; font-size:.79rem; color:var(--muted); text-align:left; border-top:1px solid var(--rule-soft)}
+
+/* ---------- chart ---------- */
+figure{margin:0; border:1px solid var(--rule); background:var(--raise)}
+.figbody{padding:26px 22px 10px; overflow-x:auto}
+figcaption{padding:12px 22px 16px; font-size:.82rem; color:var(--muted); border-top:1px solid var(--rule-soft)}
+svg{display:block; max-width:100%; height:auto}
+.legend{display:flex; flex-wrap:wrap; gap:8px 22px; padding:0 22px 16px; font-size:.79rem; color:var(--muted)}
+.legend span{display:inline-flex; align-items:center; gap:8px}
+.swatch{width:22px; height:11px; display:inline-block; border-radius:1px}
+
+/* ---------- notes ---------- */
+.note{border-left:2px solid var(--accent); padding:2px 0 2px 18px; color:var(--muted); font-size:.94rem}
+.rule-list{display:flex; flex-direction:column; gap:14px; margin:0; padding:0; list-style:none}
+.rule-list li{display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:start}
+.rule-list .tag{
+  font-family:var(--mono); font-size:.68rem; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--accent); background:var(--accent-soft); padding:3px 8px; border-radius:2px; white-space:nowrap;
+  margin-top:3px;
+}
+footer{padding:40px 0 64px; color:var(--faint); font-size:.83rem}
+footer .col{display:flex; flex-direction:column; gap:8px}
+@media (max-width:640px){
+  body{font-size:16px}
+  section{padding:42px 0}
+  .mast{padding-top:44px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<header>
+  <div class="wrap mast">
+    <div class="col" style="max-width:none">
+      <p class="eyebrow">Cicada 3301 &middot; cryptanalysis of the 2014 book</p>
+    </div>
+    <h1>All nine solved sections, and why the other nine resist</h1>
+    <p class="lede">
+      The Liber Primus is 15,933 runes long, and 2,977 of them have been read. This is a
+      reproduction of every one of those from the raw transcription, and a measurement of
+      what is left &mdash; which carries exactly one statistical fingerprint, and that
+      fingerprint rules out most of the classical toolbox.
+    </p>
+    <div class="byline eyebrow">
+      <span>29-rune Gematria Primus</span>
+      <span>18 sections &middot; 74 pages</span>
+      <span>~365,000 candidate decryptions searched</span>
+    </div>
+    <div class="primus">
+      <div class="primus-row" id="primus"></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <div class="col sec-head">
+      <p class="eyebrow">Where it stands</p>
+      <h2>Nineteen percent</h2>
+    </div>
+    <div class="verdict">
+      <div class="v"><span class="k">Solved</span><span class="n">2,977</span><span class="s">runes across 9 sections &mdash; roughly 17 pages, all reproduced here from the raw transcription</span></div>
+      <div class="v hot"><span class="k">Open</span><span class="n">12,956</span><span class="s">runes across 9 sections &mdash; roughly 55 pages, untouched since 2014</span></div>
+      <div class="v"><span class="k">2012 hunt</span><span class="n">closed</span><span class="s">solved by the community that year</span></div>
+      <div class="v"><span class="k">2013 hunt</span><span class="n">closed</span><span class="s">solved by the community that year</span></div>
+    </div>
+    <div class="col stack" style="margin-top:30px">
+      <p>
+        Everything below is computed, not quoted. Each solved section is decrypted from
+        the community's master rune transcription and diffed against the community's own
+        translation file, so a mistake in the alphabet, the cipher or the decoder shows up
+        as a failing row rather than as a confident paragraph.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col sec-head">
+      <p class="eyebrow">Reproduction</p>
+      <h2>The nine that open</h2>
+      <p style="color:var(--muted)">
+        Four sections are not enciphered at all &mdash; Cicada set them in plain runes. Two are
+        monoalphabetic. Three are polyalphabetic, and those three are where the interesting
+        rule lives.
+      </p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Segment</th><th>Title</th><th>Method</th><th class="n">Runes</th><th class="n">Agreement</th></tr></thead>
+        <tbody>
+          <tr><td class="n">0.0</td><td>A Warning</td><td>atbash &mdash; invert the gematria</td><td class="n">184</td><td class="n ok">100.00%</td></tr>
+          <tr><td class="n">0.1</td><td>Welcome / Wisdom</td><td>Vigen&egrave;re, key <code>DIVINITY</code></td><td class="n">515</td><td class="n ok">99.82%</td></tr>
+          <tr><td class="n">0.2</td><td>Some Wisdom / Know This</td><td>plain runes</td><td class="n">157</td><td class="n ok">100.00%</td></tr>
+          <tr><td class="n">0.3</td><td>A Koan</td><td>atbash, then shift +3</td><td class="n">778</td><td class="n ok">100.00%</td></tr>
+          <tr><td class="n">0.4</td><td>The Loss of Divinity</td><td>plain runes</td><td class="n">755</td><td class="n ok">99.88%</td></tr>
+          <tr><td class="n">0.5</td><td>A Koan (the lesson)</td><td>Vigen&egrave;re, key <code>FIRFUMFERENFE</code></td><td class="n">319</td><td class="n ok">100.00%</td></tr>
+          <tr><td class="n">0.6</td><td>An Instruction</td><td>plain runes</td><td class="n">89</td><td class="n ok">100.00%</td></tr>
+          <tr><td class="n">0.16</td><td>An End</td><td>running key <code>f(n) = &phi;(p&#8345;)</code></td><td class="n">85</td><td class="n ok">100.00%</td></tr>
+          <tr><td class="n">0.17</td><td>A Parable</td><td>plain runes</td><td class="n">95</td><td class="n ok">100.00%</td></tr>
+        </tbody>
+        <caption>The two sub-100% rows are the reference translation being wrong, not the decryption &mdash; see below.</caption>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="col sec-head">
+      <p class="eyebrow">A rule that runs backwards badly</p>
+      <h2>Why a ciphertext <span class="runes">&#5792;</span> means nothing on its own</h2>
+    </div>
+    <div class="col stack">
+      <p>
+        The community notes on the polyalphabetic pages say &ldquo;clear text F is not
+        encrypted.&rdquo; That is a rule about the <em>plaintext</em>: a plaintext
+        <span class="runes">&#5792;</span> is emitted unchanged and does not consume a key
+        character. Re-encrypting the known plaintext under that rule reproduces the
+        ciphertext exactly; without it, only 28%.
+      </p>
+      <p>
+        Run backwards it is ambiguous, because <span class="runes">&#5792;</span> has gematria
+        index 0 &mdash; so a <span class="runes">&#5792;</span> in the ciphertext is either an
+        untouched plaintext F, or an ordinary rune that happened to encrypt onto zero. Both
+        happen, and the collisions outnumber the real ones.
+      </p>
+    </div>
+    <div class="tw" style="margin-top:24px">
+      <table>
+        <thead><tr><th>Page</th><th class="n">Ciphertext <span class="runes">&#5792;</span></th><th class="n">Genuine plaintext F</th><th class="n">Collisions</th></tr></thead>
+        <tbody>
+          <tr><td>0.1 &mdash; Welcome</td><td class="n">25</td><td class="n">11</td><td class="n hot">14</td></tr>
+          <tr><td>0.5 &mdash; A Koan</td><td class="n">5</td><td class="n">2</td><td class="n hot">3</td></tr>
+          <tr><td>0.16 &mdash; An End</td><td class="n">5</td><td class="n">1</td><td class="n hot">4</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="col stack" style="margin-top:24px">
+      <p>
+        Each one forks the decryption. The toolkit resolves them by search rather than by
+        eye: states are keyed by key-position and n-gram context, ranked by an English model,
+        and the surviving path is the plaintext. That model has to live in rune space, not
+        latin &mdash; the Gematria Primus folds TH, EO, NG, OE, IA, EA and AE into single
+        symbols, so <code>THINGS</code> is three runes, not six, and scoring after
+        transliteration measures the wrong alphabet.
+      </p>
+      <p class="note">
+        Two things surfaced from the diffs. The <em>WISDOM</em> headline genuinely encrypts to
+        <strong>WIDSOM</strong> &mdash; the ciphertext is
+        <span class="runes">&#5842;&#5847;&#5809;&#5798;&#5792;&#5832;</span>, where WISDOM
+        would need <span class="runes">&#5842;&#5847;&#5803;&#5825;&#5792;&#5832;</span>. And
+        the reference translation drops an O from <em>FOLLOWNG</em>. The book's first page
+        warns against editing it, &ldquo;either the words or their numbers.&rdquo;
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col sec-head">
+      <p class="eyebrow">The measurement</p>
+      <h2>The open pages avoid repeating themselves</h2>
+      <p style="color:var(--muted)">
+        Index of coincidence 1.000. No differential spike at any lag from 1 to 200. No peak in
+        a key-length scan from 1 to 60. The off-diagonal bigram table is flat to within noise
+        (&chi;&sup2; 841.7 on 811 degrees of freedom, z = +0.76). By every standard handle the
+        text is random &mdash; except for one thing.
+      </p>
+    </div>
+    <figure>
+      <div class="figbody"><svg viewBox="0 0 900 300" role="img" aria-label="Observed versus expected adjacent rune repeats for each unsolved segment; observed bars are a small fraction of expected in every case."><g id="chart"></g></svg></div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--rule)"></i> expected at chance (1 in 29)</span>
+        <span><i class="swatch" style="background:var(--signal)"></i> observed</span>
+      </div>
+      <figcaption>
+        Adjacent identical runes, per unsolved segment. Across all of them: 86 observed where
+        446 are expected &mdash; z&nbsp;=&nbsp;&minus;17.35, p&nbsp;&asymp;&nbsp;10&#8315;&#8310;&#8311;.
+        The solved enciphered pages, produced by the same cipher family, sit at chance
+        (27 against 31.7, z&nbsp;=&nbsp;&minus;0.84).
+      </figcaption>
+    </figure>
+    <div class="col stack" style="margin-top:30px">
+      <ul class="rule-list">
+        <li><span class="tag">adjacency only</span><span>Repeats at gap 2, 3, 4 and 5 all sit at chance, 3.45%. Only immediate neighbours are suppressed.</span></li>
+        <li><span class="tag">not a reset</span><span>It holds within words and across word, line and page boundaries alike, so it is not a per-word or per-line key reset.</span></li>
+        <li><span class="tag">not a rune</span><span>The deficit is uniform over all 29 runes. No single symbol carries it.</span></li>
+        <li><span class="tag">not a scribe</span><span>It reproduces on a second, independent transcription &mdash; 13,136 runes, 89 observed against 452.9 expected, z = &minus;17.40. It belongs to the book.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="col sec-head">
+      <p class="eyebrow">Discrimination</p>
+      <h2>What could produce that</h2>
+      <p style="color:var(--muted)">
+        Rather than guess, encrypt real Liber Primus plaintext every way and ask which output
+        carries the measured fingerprint: IoC 1.000, doublets at 0.19&times; chance, and a flat
+        off-diagonal bigram table.
+      </p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Construction</th><th class="n">IoC</th><th class="n">Doublets / expected</th><th class="n">Off-diagonal z</th></tr></thead>
+        <tbody>
+          <tr><td>true one-time pad</td><td class="n">1.001</td><td class="n">0.91</td><td class="n">+0.70</td></tr>
+          <tr><td>Vigen&egrave;re, L = 8</td><td class="n">1.102</td><td class="n">0.95</td><td class="n">+156.45</td></tr>
+          <tr><td>Vigen&egrave;re, L = 40</td><td class="n">1.012</td><td class="n">0.95</td><td class="n">+29.71</td></tr>
+          <tr><td>running key (English)</td><td class="n">1.052</td><td class="n">1.03</td><td class="n">+31.58</td></tr>
+          <tr><td>autokey on plaintext</td><td class="n">1.088</td><td class="n">1.12</td><td class="n">+192.29</td></tr>
+          <tr><td>autokey on ciphertext</td><td class="n">1.001</td><td class="n">0.88</td><td class="n">+0.64</td></tr>
+          <tr><td>cumulative sum</td><td class="n">1.002</td><td class="n">0.48</td><td class="n">+227.67</td></tr>
+          <tr><td>pad + hard no-repeat rule</td><td class="n">1.000</td><td class="n">0.00</td><td class="n">+9.71</td></tr>
+          <tr class="match"><td>pad + 81% no-repeat rule</td><td class="n">1.000</td><td class="n">0.18</td><td class="n">&minus;1.44</td></tr>
+          <tr class="match"><td>the actual unsolved pages</td><td class="n">1.000</td><td class="n">0.19</td><td class="n">+0.75</td></tr>
+        </tbody>
+        <caption>Only the last construction matches on all three axes at once.</caption>
+      </table>
+    </div>
+    <div class="col stack" style="margin-top:26px">
+      <p>
+        So the open pages behave like a stream cipher whose key is indistinguishable from
+        random, plus a partial constraint against repeating a rune immediately. The obvious
+        candidate for that constraint &mdash; a cumulative cipher, where
+        <code>c[i] = c[i-1] + p[i]</code> and a repeat means a plaintext F &mdash; is ruled out
+        twice over: it predicts repeats at the plaintext F rate of 1.63%, not the observed
+        0.66%, and it leaves heavy structure in the bigram table. Inverting it recovers noise.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col sec-head">
+      <p class="eyebrow">Negative result</p>
+      <h2>What was searched, and found nothing</h2>
+      <p style="color:var(--muted)">
+        The battery is validated on positive controls before it is trusted: it rediscovers
+        atbash on 0.0, atbash+3 on 0.3, &phi;(p&#8345;) on 0.16, <code>DIVINITY</code> on 0.1 and
+        <code>FIRFUMFERENFE</code> on 0.5, each by 0.6 to 1.5 nats over the runner-up.
+      </p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Family</th><th class="n">Candidates / segment</th><th class="n">Best score seen</th></tr></thead>
+        <tbody>
+          <tr><td>29 shifts, atbash, all 812 affine maps</td><td class="n">870</td><td class="n">&minus;3.74</td></tr>
+          <tr><td>14 integer streams &times; 40 offsets &times; 2 directions &times; atbash</td><td class="n">2,240</td><td class="n">&minus;3.74</td></tr>
+          <tr><td>10,000-word keyword Vigen&egrave;re</td><td class="n">38,496</td><td class="n">&minus;3.68</td></tr>
+          <tr><td>the same streams under the F rule, beam decoded</td><td class="n">560</td><td class="n">&minus;3.63</td></tr>
+          <tr><td>1,200-word keyword under the F rule</td><td class="n">2,492</td><td class="n">&minus;3.63</td></tr>
+          <tr><td>columnar transposition, 2&ndash;60 columns</td><td class="n">118</td><td class="n">&minus;3.77</td></tr>
+          <tr><td>autokey, every primer up to length 2</td><td class="n">870</td><td class="n">&minus;3.71</td></tr>
+        </tbody>
+        <caption>English scores about &minus;2.1 and uniform random about &minus;3.85. Nothing cleared &minus;3.6, which is what a maximum over that many random draws produces by itself.</caption>
+      </table>
+    </div>
+    <div class="col stack" style="margin-top:26px">
+      <p>
+        The integer streams include the primes, &phi;(p&#8345;), &phi;(n), Fibonacci, Lucas,
+        triangular numbers, squares, prime gaps, prime partial sums, multiples of 3301 and the
+        digits of &pi; and e. None of this proves the pages are unbreakable. It does mean the
+        answer is not a keyword, not a named integer sequence, not a transposition, and not any
+        periodic key &mdash; which is most of what a classical toolbox holds, and is consistent
+        with a decade of community failure.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col sec-head">
+      <p class="eyebrow">The earlier hunts</p>
+      <h2>2012 and 2013</h2>
+    </div>
+    <div class="col stack">
+      <p>
+        Both were solved the year they ran. They were chains of steganography, hidden services,
+        a phone number and a book code rather than cipher work, so most steps cannot be
+        recomputed from what survives. Two can.
+      </p>
+      <ul class="rule-list">
+        <li>
+          <span class="tag">2012</span>
+          <span>The archived Mabinogion file is <em>The Lady of the Fountain</em> under a
+          Vigen&egrave;re with the 23-letter key <code>KCOHTGSMHIRATHOSOTNABCA</code>,
+          <strong>reset at every line</strong>. The reset is what hides it: read as one stream
+          the key looks aperiodic. Recovered from the cipher/plaintext pair; the round trip is
+          exact over all 9,525 letters.</span>
+        </li>
+        <li>
+          <span class="tag">2013</span>
+          <span>Four 256-byte blobs from the hidden services, one derived from Liber Primus
+          pages 49&ndash;51. They are not RSA moduli &mdash; three of the four are even, pairwise
+          GCDs are trivial, and trial division to 10&#8309; leaves 2013-bit remainders. Byte
+          entropy of 7.12&ndash;7.28 bits is exactly what 256 random bytes give. Signature or
+          ciphertext material, nothing factorable.</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <div class="col">
+    <p>
+      Rune data from the community archives <code>rtkd/iddqd</code> and
+      <code>krisyotam/cicada3301</code>. Every figure on this page is produced by the toolkit
+      in <code>cicada/</code>; <code>solve_cicada.py verify</code> regenerates the reproduction
+      table and <code>solve_cicada.py doublets</code> the chart.
+    </p>
+    <p>The other 12,956 runes remain unread.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var GP=[["ᚠ","F",2],["ᚢ","U",3],["ᚦ","TH",5],["ᚩ","O",7],["ᚱ","R",11],["ᚳ","C",13],
+          ["ᚷ","G",17],["ᚹ","W",19],["ᚻ","H",23],["ᚾ","N",29],["ᛁ","I",31],["ᛄ","J",37],
+          ["ᛇ","EO",41],["ᛈ","P",43],["ᛉ","X",47],["ᛋ","S",53],["ᛏ","T",59],["ᛒ","B",61],
+          ["ᛖ","E",67],["ᛗ","M",71],["ᛚ","L",73],["ᛝ","NG",79],["ᛟ","OE",83],["ᛞ","D",89],
+          ["ᚪ","A",97],["ᚫ","AE",101],["ᚣ","Y",103],["ᛡ","IA",107],["ᛠ","EA",109]];
+  var row=document.getElementById("primus");
+  GP.forEach(function(g){
+    var d=document.createElement("div"); d.className="gp";
+    d.innerHTML='<span class="r">'+g[0]+'</span><span class="l">'+g[1]+'</span><span class="p">'+g[2]+'</span>';
+    row.appendChild(d);
+  });
+
+  var DATA=[["0.7",4,25.1],["0.8",6,39.4],["0.9",9,59.6],["0.11",10,65.3],
+            ["0.12",11,35.2],["0.13",13,52.5],["0.14",12,54.8],["0.15",21,114.3]];
+  var W=900,H=300,padL=44,padR=16,padT=14,padB=44;
+  var iw=W-padL-padR, ih=H-padT-padB;
+  var max=120, ns="http://www.w3.org/2000/svg", g=document.getElementById("chart");
+  function el(t,a){var e=document.createElementNS(ns,t);for(var k in a)e.setAttribute(k,a[k]);return e;}
+  var y=function(v){return padT+ih-(v/max)*ih;};
+  [0,30,60,90,120].forEach(function(v){
+    g.appendChild(el("line",{x1:padL,x2:W-padR,y1:y(v),y2:y(v),stroke:"var(--rule-soft)","stroke-width":1}));
+    var t=el("text",{x:padL-9,y:y(v)+4,"text-anchor":"end",fill:"var(--faint)","font-size":11,"font-family":"var(--mono)"});
+    t.textContent=v; g.appendChild(t);
+  });
+  var band=iw/DATA.length, bw=Math.min(46,band*0.44);
+  DATA.forEach(function(d,i){
+    var cx=padL+band*i+band/2;
+    g.appendChild(el("rect",{x:cx-bw-2,y:y(d[2]),width:bw,height:padT+ih-y(d[2]),fill:"var(--rule)"}));
+    g.appendChild(el("rect",{x:cx+2,y:y(d[1]),width:bw,height:Math.max(2,padT+ih-y(d[1])),fill:"var(--signal)"}));
+    var v=el("text",{x:cx+2+bw/2,y:y(d[1])-7,"text-anchor":"middle",fill:"var(--signal)","font-size":11,"font-family":"var(--mono)","font-weight":500});
+    v.textContent=d[1]; g.appendChild(v);
+    var e=el("text",{x:cx-bw/2-2,y:y(d[2])-7,"text-anchor":"middle",fill:"var(--faint)","font-size":11,"font-family":"var(--mono)"});
+    e.textContent=Math.round(d[2]); g.appendChild(e);
+    var l=el("text",{x:cx,y:H-padB+20,"text-anchor":"middle",fill:"var(--muted)","font-size":12,"font-family":"var(--mono)"});
+    l.textContent=d[0]; g.appendChild(l);
+  });
+  g.appendChild(el("line",{x1:padL,x2:W-padR,y1:y(0),y2:y(0),stroke:"var(--rule)","stroke-width":1}));
+  var ax=el("text",{x:padL-9,y:padT-2,"text-anchor":"end",fill:"var(--faint)","font-size":10,"font-family":"var(--mono)"});
+  ax.textContent="repeats"; g.appendChild(ax);
+})();
+</script>

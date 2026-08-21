@@ -83,8 +83,12 @@ class Page:
 
     @property
     def lp_number(self) -> int:
-        """The book's own page number (-16 .. 57)."""
-        return self.idx - 17
+        """The book's own page number.
+
+        The archive's index numbers the pages 1..74 and the book numbers them
+        -16..57, so file position 0 is book page -16.
+        """
+        return self.idx - 16
 
 
 class LiberPrimus:
@@ -106,15 +110,21 @@ class LiberPrimus:
             if _runes_only(raw)
         ]
 
-        self.pages: list[Page] = []
-        for i, raw in enumerate(body.split(PAGE)):
-            self.pages.append(Page(i, raw))
-        # attribute pages to segments by walking the stream
-        cursor = 0
+        # Pages and segments are independent markers in the same stream, so a
+        # page is attributed by where its runes fall in the concatenated book.
+        self.pages = [Page(i, raw) for i, raw in enumerate(body.split(PAGE))]
+        bounds, at = [], 0
         for seg in self.segments:
-            for pg in self.pages:
-                if pg.segment == -1 and seg.runes[cursor:cursor + len(pg.runes)] == pg.runes:
-                    pass
+            bounds.append((at, at + seg.n, seg.idx))
+            at += seg.n
+        at = 0
+        for pg in self.pages:
+            mid = at + len(pg.runes) // 2
+            for lo, hi, idx in bounds:
+                if lo <= mid < hi:
+                    pg.segment = idx
+                    break
+            at += len(pg.runes)
         self.translation = _read(_TRANSLATION)
         self.index = _read(_INDEX)
 
