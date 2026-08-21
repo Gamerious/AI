@@ -64,8 +64,9 @@ def cmd_stats(args) -> int:
                      key=lambda t: -t[1])[:4]
         print(f"0.{s.idx:<4d} {a.size:6d} {state:7s} {ioc(a):6.3f} {doublets(a)*100:6.2f} "
               f"{model.score(a):7.3f}   " + " ".join(f"{p}:{v:.2f}" for p, v in per))
-    print("\nreference  English in runes: IoC 1.67  doublets ~2.6%  4gram -2.1")
-    print("           uniform random   : IoC 1.00  doublets  3.45%  4gram -3.85")
+    print("\nreference  Liber Primus plaintext: IoC 1.73  doublets 2.6%   4gram -2.1")
+    print("           English in rune space : IoC 1.79")
+    print("           uniform random        : IoC 1.00  doublets 3.45%  4gram -3.85")
     return 0
 
 

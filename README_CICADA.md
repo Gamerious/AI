@@ -87,8 +87,9 @@ three runes (TH + ING + S), not six.
 Segments 0.7 - 0.15 have resisted the community since 2014.  Measuring them
 says why.
 
-**Every ordinary handle is absent.**  Index of coincidence is 1.000 against
-1.673 for English in runes and 1.000 for uniform random.  No lag from 1 to 200
+**Every ordinary handle is absent.**  Index of coincidence is 1.000, against
+1.787 for English in rune space, 1.730 for the Liber Primus's own plaintext and
+1.000 for uniform random.  No lag from 1 to 200
 shows a differential spike.  A column-wise chi-squared scan over key lengths
 1-60 produces no peak, only the monotone drift in key length that means "no
 periodic key".  The off-diagonal bigram table is statistically flat
